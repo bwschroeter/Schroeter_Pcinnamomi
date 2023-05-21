@@ -1,0 +1,117 @@
+```{r, libs, message=FALSE}
+library(readxl)
+library("kableExtra")
+library(WGCNA)
+library(tidyverse)
+library(gridExtra)
+library(reshape2)
+library(dplyr)
+library(edgeR)
+library(clusterProfiler)
+library(BiocGenerics)
+library(GenomicFeatures)
+library(Biostrings)
+library(rtracklayer)
+```
+
+download .faa file https://ftp.ncbi.nlm.nih.gov/genomes/genbank/protozoa/Phytophthora_cinnamomi/latest_assembly_versions/GCA_018691715.1_ASM1869171v1/GCA_018691715.1_ASM1869171v1_protein.faa.gz
+```{r}
+# Read the .faa file
+faa_file <- "GCA_018691715.1_ASM1869171v1_protein.faa"  
+sequences <- readAAStringSet(faa_file, format = "fasta")
+
+formatted_sequences <- paste0(">", names(sequences), "\n", as.character(sequences), "\n")
+output_file <- "/mnt/data/barry/Schroeter_Pcinnamomi/PcEffector/wgcnanorm.fasta" 
+writeLines(formatted_sequences, output_file)
+
+
+
+
+
+wgcnanormlist <- read.table('wgcnanormlist.tsv')
+Pcgenenames <- read.table('pcgeneids.tsv', row.names = 1, quote = "", sep='\t', fill = TRUE, header = TRUE)
+
+wgcnaprotein.id <- dplyr::right_join(Pcgenenames, wgcnanormlist, by = 'gene_id')
+
+
+# Define a list of protein IDs to extract
+protein_list <- wgcnaprotein.id$protein_id
+
+
+```
+
+```{r}
+# Read the .faa file
+faa_file <- "GCA_018691715.1_ASM1869171v1_protein.faa"  # Replace with the actual path to your .faa file
+sequences <- readAAStringSet(faa_file)
+
+# Extract headers and sequences
+headers <- names(sequences)
+sequence_strings <- as.character(sequences)
+
+# Extract protein identifiers from headers
+protein_identifiers <- sub("^>(\\S+).*", "\\1", headers)
+
+# Create a data frame with protein identifiers and sequences
+df <- data.frame(protein_id = protein_identifiers, Sequence = sequence_strings, stringsAsFactors = FALSE)
+
+# Filter the "ProteinID" column to include only the first 12 characters
+df$protein_id <- substr(df$protein_id, 1, 12)
+
+# Print the updated data frame
+print(df)
+
+wgcnaprotein.idfaa <- dplyr::right_join(df, wgcnaprotein.id, by = 'protein_id')
+
+```
+```{r}
+# Create the FASTA string
+#fasta_string <- paste0(">", wgcnaprotein.idfaa$protein_id, "\n", wgcnaprotein.idfaa$Sequence, "\n")
+
+# Write the FASTA string to a file
+#output_file <- "/mnt/data/barry/Schroeter_Pcinnamomi/PcEffector/output.fasta"  
+#writeLines(fasta_string, con = output_file)
+
+
+# Create the FASTA strings for the first 3000 entries
+fasta_string_3000 <- paste0(">", wgcnaprotein.idfaa$protein_id[1:3000], "\n", wgcnaprotein.idfaa$Sequence[1:3000], "\n")
+
+# Create the FASTA strings for the remaining entries
+fasta_string_rest <- paste0(">", wgcnaprotein.idfaa$protein_id[3001:length(wgcnaprotein.idfaa$protein_id)], "\n", wgcnaprotein.idfaa$Sequence[3001:length(wgcnaprotein.idfaa$protein_id)], "\n")
+
+# Write the FASTA strings to separate files
+output_file_3000 <- "/mnt/data/barry/Schroeter_Pcinnamomi/PcEffector/output1.fasta"  # Replace with the desired output file path for the first 3000 entries
+output_file_rest <- "/mnt/data/barry/Schroeter_Pcinnamomi/PcEffector/output2.fasta"  # Replace with the desired output file path for the remaining entries
+
+writeLines(fasta_string_5000, con = output_file_3000)
+writeLines(fasta_string_rest, con = output_file_rest)
+
+
+
+```
+
+
+Get supplementary files from https://rdcu.be/dcczO
+https://static-content.springer.com/esm/art%3A10.1186%2Fs12864-021-07552-y/MediaObjects/12864_2021_7552_MOESM2_ESM.xls
+
+```{r, Engelbrecht supp}
+pcrxlr <- read_xls('12864_2021_7552_MOESM2_ESM.xls', 
+                   sheet = 'TableS2',
+                   col_names = F,
+                   range = 'A3:A183') 
+# Rename the column
+colnames(pcrxlr) <- c("gene_id")
+
+# Remove the last three characters of each row
+pcrxlr$gene_id <- substr(pcrxlr$gene_id, 1, nchar(pcrxlr$gene_id) - 3)
+
+as.data.frame(pcrxlr)
+
+head(pcrxlr)
+```
+
+```{r}
+rxlr.df <- dplyr::right_join(wgcnanormlist, pcrxlr, by = 'gene_id')
+
+```
+

@@ -1,0 +1,184 @@
+---
+title: "Pc time course analysis"
+output:
+  html_document:
+    df_print: paged
+---
+
+#BiocManager::install(version = '3.17')
+#if (!require("BiocManager", quietly = TRUE))
+#    install.packages("BiocManager")
+#BiocManager::install("TCseq")
+#BiocManager::install("edgeR")
+
+## Load Libraries
+
+```{r message=FALSE, warning=FALSE, include=FALSE, paged.print=TRUE}
+suppressPackageStartupMessages({c(
+library(WGCNA),
+library(DESeq2),
+library(GEOquery),
+library(tidyverse),
+library(gridExtra),
+library(reshape2),
+library(rtracklayer),
+library(dplyr),
+library(TCseq),
+library(edgeR),
+library(SummarizedExperiment),
+library(ggplot2),
+library(grid),
+library(Cairo))})
+```
+
+get locus tag and length for RPKM 
+```{r}
+pc.gtf <- rtracklayer::import("https://ftp.ncbi.nlm.nih.gov/genomes/genbank/protozoa/Phytophthora_cinnamomi/latest_assembly_versions/GCA_018691715.1_ASM1869171v1/GCA_018691715.1_ASM1869171v1_genomic.gtf.gz")
+pc.df <- as.data.frame((pc.gtf))
+
+pc.genes <- filter(pc.df, type == "transcript")
+pc.geneids <- select(pc.genes, seqnames, start, end, gene_id)  
+
+pc.annotations <- pc.geneids %>% 
+  distinct(gene_id, .keep_all = T)
+nrow(pc.annotations)
+
+```
+
+```{r, stringsAsFactors=FALSE}
+gene.len <- as.data.frame(pc.annotations, stringsAsFactors = F)
+colnames(gene.len) <- c("chr","start", "end", "id")
+
+gene.len$chr = (as.character(gene.len$chr)) 
+
+is.numeric(gene.len)
+head(gene.len)
+#write.table(pcannot, file = "pcgeneids.tsv",quote=FALSE,sep="\t")
+```
+
+
+Assemble count matrix and coldata file
+
+```{r, echo=FALSE}
+tmp<-read.table("3col.tsv.gz",header=F)
+x<-as.matrix(acast(tmp, V2~V1, value.var="V3"), stringsAsFactors = FALSE)
+colnames(x)<-sapply(strsplit(colnames(x),"_"),"[[",1)
+
+#head(x)
+#write.table(x,file="countmatrix.tsv",quote=FALSE,sep="\t")
+```
+
+Import files into r
+
+```{r, stringsAsFactors=FALSE}
+coldata <- read.table('sample_info.tsv')
+Pcgenenames <- read.table('pcgeneids.tsv', row.names = 1, quote = "", sep='\t', fill = TRUE, header = TRUE)
+IUM83Tanjilcountmatrix <- read.table('countmatrix.tsv') 
+```
+
+Clean countmatrix for P. cinnamomi analysis
+
+```{r, stringsAsFactors=FALSE}
+
+collabels <- colnames(IUM83Tanjilcountmatrix) <- (coldata$Sample)
+colnames(IUM83Tanjilcountmatrix) <- collabels
+
+IUM83Tanjilcountmatrix <- tibble::rownames_to_column(IUM83Tanjilcountmatrix, "gene_id")
+
+IUM83CountMatrix <- IUM83Tanjilcountmatrix %>% 
+  filter(str_detect(gene_id, "IUM83")) 
+  
+rownames(IUM83CountMatrix) <- IUM83CountMatrix$gene_id
+IUM83CountMatrix <- IUM83CountMatrix [ ,-1]
+IUM83CountMatrix <- as.data.frame(IUM83CountMatrix)
+IUM83CountMatrix <- IUM83CountMatrix[ ,-(1:12)]
+IUM83CountMatrix <- as.matrix(IUM83CountMatrix)
+head(IUM83CountMatrix)
+
+```
+
+Clean coldata for Deseq2 normalisation
+
+```{r}
+colData <- coldata %>% 
+  filter(str_detect(Sample, "Pc"))
+
+rownames(colData) <- colData$Sample
+colData <- colData [ ,-1] 
+colnames(colData) <- c("sampleid", "treatment", "timepoint", "stage", "group")
+colData <- select(colData, c(sampleid, timepoint, group))  
+
+head(colData)
+```
+
+```{r}
+#create data frame of experiment design: 4 time points and 2 replicates for each time point.
+d <- data.frame(sampleID = 1:8, group = rep(c(1, 2, 3, 4), 2),
+timepoint = rep(c('0h', '24h', '48h', '72h'), 2))
+
+d <- data.frame(sampleID = 1:12, group = rep(c(1, 2, 3, 4), 3),
+timepoint = rep(c('0h', '18h', '30h', '48h'), 3))
+head(d)
+```
+
+
+
+```{r}
+head(gene.len)
+head(design)
+head(IUM83CountMatrix)
+
+#my_dataframe$column = as.numeric(as.character(my_dataframe$column)) 
+design <- data.frame(
+  sampleid = colData$sampleid,
+  timepoint =  as.character(colData$time),
+  group = colData$group,
+  stringsAsFactors = FALSE)
+
+
+
+
+isNumeric(gene.len)
+isNumeric(IUM83CountMatrix)
+isNumeric(design)
+
+tca <- TCA(design = design, genomicFeature = gene.len,
+ counts = IUM83CountMatrix)
+
+```
+
+
+
+```{r}
+tca <- DBanalysis(tca)
+tca <- DBanalysis(tca, filter.type = "raw", filter.value = 10, samplePassfilter = 3)
+
+DBres <- DBresult(tca, group1 = "0h", group2 = c("18h","30h","48h"))
+str(DBres, strict.width = "cut")
+```
+
+
+```{r}
+head(DBres$`18hvs0h`)
+DBres.sig <- DBresult(tca, group1 = "0h", group2 = c("18h","30h","48h"), top.sig = TRUE)
+str(DBres.sig, strict.width = "cut")
+```
+
+```{r}
+tca <- timecourseTable(tca, value = "expression", norm.method = "rpkm", filter = TRUE)
+
+t <- tcTable(tca)
+head(t)
+
+```
+
+
+```{r}
+tca <- timeclust(tca, algo = "cm", k = 6, standardize = TRUE)
+p <- timeclustplot(tca, value = "z-score(PRKM)", cols = 3)
+
+print(p)
+
+```
+
+

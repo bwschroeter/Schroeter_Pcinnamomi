@@ -1,0 +1,913 @@
+---
+title: "WGCNA of Pc timecourse"
+author: "BSchroeter"
+date: "2023-03-20"
+output:
+  html_document:
+    toc: yes
+    df_print: paged
+  prettydoc::html_pretty:
+    theme: hpstr
+    highlight: github
+  html_notebook:
+    theme: lumen
+    toc: yes
+    toc_float: yes
+---
+
+# Purpose
+
+1. Build a weighted and directed network of genes based on the Dual RNA seq data generated from the timecourse of Phytophthora cinnamomi and Lupinus angustifolius 
+2. Determine modules (clusters of genes) from the network associated to disease progression (for example, biotrophic or necrotrophic stages) 
+3. Extract the names of the genes from these hubs and compare them to the genes in the literature 
+4. Functionally annotate these genes
+
+Working idea: This network will then be used to identify hub genes for each of the early, middle and late interactions.
+
+## Load Libraries
+
+```{r message=FALSE, warning=FALSE, include=FALSE, paged.print=TRUE}
+suppressPackageStartupMessages({c(
+library(WGCNA),
+library(DESeq2),
+library(GEOquery),
+library(tidyverse),
+library(gridExtra),
+library(reshape2),
+library(rtracklayer),
+library(dplyr))})
+BiocManager::install('kableExtra')
+```
+
+Load Phytophthora cinnamomi gtf file, clean up to get Gene IDs
+
+Combine alternatively spliced transcripts (seen in transcript_id as -RA and RB)
+
+```{r}
+pc.gtf <- rtracklayer::import("https://ftp.ncbi.nlm.nih.gov/genomes/genbank/protozoa/Phytophthora_cinnamomi/latest_assembly_versions/GCA_018691715.1_ASM1869171v1/GCA_018691715.1_ASM1869171v1_genomic.gtf.gz")
+pc.df <- as.data.frame((pc.gtf))
+
+pc.genes <- filter(pc.df, type == "start_codon")
+pc.geneids <- select(pc.genes, gene_id, product, protein_id)  
+
+pc.annotations <- pc.geneids %>% 
+  distinct(gene_id, .keep_all = T)
+nrow(pc.annotations)
+
+pcannot <- as.matrix(pc.annotations)
+
+#write.table(pcannot, file = "pcgeneids.tsv",quote=FALSE,sep="\t")
+```
+
+Load GO terms blasted from Omicsbox 
+```{r}
+goterms <- read.delim('pc.goterms.txt', header = TRUE) %>%
+  select(c(SeqName, GO.IDs, GO.Names, Description))
+  
+head(goterms)
+
+colnames(goterms) <- c("protein_id", "GO_terms", "GO_descripton", "description")
+
+goterms.df <- dplyr::right_join(goterms, pc.annotations, by = 'protein_id')
+nrow(goterms.df)
+```
+
+Make GO term list for enrichment analysis
+
+```{r}
+splitgt.df <- as.tibble(goterms.df) %>%
+  separate_longer_delim(c(GO_terms, GO_descripton), delim = ";")
+
+splitgt.df <- as.data.frame(splitgt.df)
+
+#strip leading spaces
+splitgt.df$GO_terms <- gsub(" ","",splitgt.df$GO_terms)
+splitgt.df$GO_descripton <- gsub("^ ","",splitgt.df$GO_descripton)
+head(splitgt.df, 10)
+
+gu <- unique(splitgt.df$GO_terms)
+head(gu,20)
+
+gul <- lapply(1:length(gu), function(i){
+  mygo <- gu[i]
+  unique(splitgt.df[splitgt.df$GO_terms == mygo, "gene_id"])
+})
+
+names(gul) <- lapply(1:length(gu), function(i){
+  mygo <- gu[i]
+  desc <- head(splitgt.df[splitgt.df$GO_terms == mygo, "GO_descripton"],1)
+  id_desc <- paste(mygo,desc)
+})
+
+head(names(gul))
+
+```
+
+Assemble count matrix and coldata file
+
+```{r, echo=FALSE}
+tmp<-read.table("3col.tsv.gz",header=F)
+x<-as.matrix(acast(tmp, V2~V1, value.var="V3"))
+colnames(x)<-sapply(strsplit(colnames(x),"_"),"[[",1)
+
+#head(x)
+#write.table(x,file="countmatrix.tsv",quote=FALSE,sep="\t")
+```
+
+Import files into r
+
+```{r}
+coldata <- read.table('sample_info.tsv')
+Pcgenenames <- read.table('pcgeneids.tsv', row.names = 1, quote = "", sep='\t', fill = TRUE, header = TRUE)
+IUM83Tanjilcountmatrix <- read.table('countmatrix.tsv') 
+```
+
+Clean countmatrix for P. cinnamomi analysis
+
+```{r}
+collabels <- colnames(IUM83Tanjilcountmatrix) <- (coldata$Sample)
+colnames(IUM83Tanjilcountmatrix) <- collabels
+
+IUM83Tanjilcountmatrix <- tibble::rownames_to_column(IUM83Tanjilcountmatrix, "gene_id")
+
+IUM83CountMatrix <- IUM83Tanjilcountmatrix %>% 
+  filter(str_detect(gene_id, "IUM83")) 
+  
+rownames(IUM83CountMatrix) <- IUM83CountMatrix$gene_id
+IUM83CountMatrix <- IUM83CountMatrix [ ,-1]
+IUM83CountMatrix <- as.data.frame(IUM83CountMatrix)
+IUM83CountMatrix <- IUM83CountMatrix[ ,-(1:12)]
+
+#write.table(IUM83CountMatrix, file = "Pc_countmatrix.tsv",quote=FALSE,sep="\t")
+```
+
+Clean coldata for Deseq2 normalisation
+
+```{r}
+colData <- coldata %>% 
+  filter(str_detect(Sample, "Pc"))
+
+rownames(colData) <- colData$Sample
+colData <- colData [ ,-1] 
+```
+
+Detect and remove outlier genes
+
+```{r}
+#Call a function from WGCNA package that detects outliers 
+#Rows should be the samples and the columns genes
+gsg <- goodSamplesGenes(t(IUM83CountMatrix))
+summary(gsg)
+
+#If false, then there are outliers
+gsg$allOK #False
+
+table(gsg$goodGenes) #3012to be excluded
+table(gsg$goodSamples) #All 12 samples passed
+
+# remove genes that are detectd as outliers
+data <- IUM83CountMatrix[gsg$goodGenes == TRUE,]
+```
+
+Detect outlier samples
+
+```{r}
+# detect outlier samples - hierarchical clustering
+htree <- hclust(dist(t(data)), method = "average")
+groups <- cutree(htree, k=2) # cut tree into clusters
+
+plot(htree, labels(groups))
+# draw dendogram with red borders around the clusters
+rect.hclust(htree, k=2, border="red")
+```
+
+Remove outlier samples
+
+```{r}
+clusters <- as.data.frame(groups)
+head(clusters)
+table(clusters)
+
+# the biggest cluster is cluster 2 and the rest will be tagged as outliers
+outliers <- clusters %>% filter(., !groups == 2) %>% row.names()
+
+# exclude outlier samples
+data.subset <- data[,!(colnames(data) %in% outliers)]
+```
+
+# Normalisation using DESeq2 package
+
+The WGCNA library requires normalisation using the vst (variance-stabilising transform) function from the DESeq2 package
+
+```{r}
+# exclude outlier samples from the column data to match the new data
+colData <- colData %>% 
+  filter(!row.names(.) %in% outliers)
+
+# making sure the rownames and column names identical for the two data sets
+all(rownames(colData) == colnames(data.subset))
+
+# create DESeq Data Set
+dds <- DESeqDataSetFromMatrix(countData = data.subset,
+                              colData = colData,
+                              design = ~ 1) # no model, for normalisation only
+
+# remove all genes with counts < 10 in more than 90% of samples (12*0.9=10.8 ~ 11) as suggested by WGCNA on RNAseq FAQ (https://horvath.genetics.ucla.edu/html/CoexpressionNetwork/Rpackages/WGCNA/faq.html)
+# <10 in more than 90% samples
+dds90 <- dds[rowSums(counts(dds) >= 10) >= 8,]
+nrow(dds90) # 5403 genes
+
+# >= 15) >= 8,] 4538 genes
+# >= 10) >= 8,] 5541 genes <===== #less than 10 counts in %90 of samples
+
+
+gene.list <- row.names(dds90)
+#lapply(gene.list, write, "all_genes.txt", append=TRUE)
+
+# perform variance stabilization
+dds_norm <- vst(dds90)
+
+# get normalized counts
+norm.counts <- assay(dds_norm) %>% 
+  t()
+
+#Save normalised dataset for faster analysis next time
+saveRDS(norm.counts, "norm.counts.rds")
+```
+
+# Network Construction
+
+```{r}
+# load norm.counts object
+#norm.counts <- readRDS("norm.counts")
+
+# Choose a set of soft-thresholding powers to create a scale-free network
+power <- c(c(1:10), seq(from = 12, to = 30, by = 2))
+
+# Call the network topology analysis function
+sft <- pickSoftThreshold(norm.counts,
+                  powerVector = power,
+                  networkType = "signed",
+                  RsquaredCut = 0.8,
+                  verbose = 5)
+
+sft.data <- sft$fitIndices
+
+a1 <- ggplot(sft.data, aes(Power, SFT.R.sq, label = Power)) +
+  geom_point() +
+  geom_text(nudge_y = 0.1) +
+  geom_hline(yintercept = 0.80, color = 'red') +
+  labs(x = 'Power',
+       y = 'Scale free topology model fit, signed R^2',
+       title = 'Scale independence') +
+  theme_classic()
+
+a2 <- ggplot(sft.data, aes(Power, mean.k., label = Power)) +
+  geom_point() +
+  geom_text(nudge_y = 0.1) +
+  labs(x = 'Power',
+       y = 'Mean Connectivity',
+       title = 'Mean connectivity') +
+  theme_classic()
+  
+grid.arrange(a1, a2, nrow = 2) 
+
+soft_power <- sft$powerEstimate ### 16
+
+#soft_power <- 16
+```
+
+Create network and identify modules
+bwnet <- blockwiseModules(norm.counts,
+                 maxBlockSize = 30000, # selected total number of genes since CPU memory is sufficient (32GB workstation should be able to handle perhaps 30000)
+                 TOMType = "signed",
+                 power = soft_power,
+                 mergeCutHeight = 0.25,
+                 numericLabels = FALSE, # set as false to assign color as labels
+                 randomSeed = 1234, # for reproducibility since this function uses clustering
+                 verbose = 3)
+Note: this chunk is set not to run since the blockwise Modules function takes a long time to run. The R object has been saved and is loaded in the next chunk for a faster run time.
+
+```{r eval=FALSE, include=FALSE}
+# convert matrix to numeric
+norm.counts[] <- sapply(norm.counts, as.numeric)
+
+#Successively, hierarchical clustering was performed to identify modules
+temp_cor <- cor
+cor <- WGCNA::cor
+
+# Parameters to be tweaked later
+bwnet <- blockwiseModules(norm.counts,
+                 maxBlockSize = 7500, # selected total number of genes since CPU memory is sufficient (32GB workstation should be able to handle perhaps 30000)
+                 TOMType = "signed",
+                 power = soft_power,
+                 mergeCutHeight = 0.20,
+                 saveTOMs = TRUE,
+                 saveTOMFileBase = "pc_TOM",
+                 numericLabels = FALSE, # set as false to assign color as labels
+                 #randomSeed = 1243, # for reproducibility since this function uses clustering
+                 verbose = 3)
+
+# Save bwnet object
+saveRDS(bwnet, "bwnet.rds")
+
+cor <- temp_cor
+```
+
+```{r}
+# load bwnet object
+bwnet <- readRDS("bwnet.rds")
+
+module_eigengenes <- bwnet$MEs %>%
+  orderMEs(.)
+
+head(module_eigengenes)
+
+
+# Plot the dendrogram and the module colors before and after merging underneath
+plotDendroAndColors(bwnet$dendrograms[[1]], cbind(bwnet$unmergedColors, bwnet$colors),
+                    c("unmerged", "merged"),
+                    dendroLabels = FALSE,
+                    addGuide = TRUE,
+                    hang= 0.03,
+                    guideHang = 0.05)
+
+ # grey module = all genes that doesn't fall into other modules
+ 
+module.total <- table(bwnet$colors)
+```
+
+# Relate the modules to stages
+
+```{r}
+# create traits file - assign 1 if a sample is a certain stage, else assign 0
+#Dis_traits <- colData %>% 
+#  mutate(Dis.vs.all = ifelse(grepl('Treated', Treatment), 1, 0)) %>% 
+#  select(4)
+
+
+factor_levels <- unique(colData$Stage)
+
+# transform stages into factors and define levels
+colData$Stage <- factor(colData$Stage, levels = factor_levels)
+
+traits <- binarizeCategoricalColumns(colData$Stage,
+                           dropFirstLevelVsAll = FALSE,
+                           includePairwise = FALSE,
+                           includeLevelVsAll = TRUE,
+                           minCount = 1)
+
+rownames(traits) <- colData$Sample
+```
+
+# Visualise module-trait association as a heatmap
+
+```{r r, fig.width=8, fig.height=12}
+# Define numbers of genes and samples
+nSamples <- nrow(norm.counts)
+nGenes <- ncol(norm.counts)
+
+# correlation for module eigengenes and traits
+module.trait.corr <- cor(module_eigengenes, traits, use = 'p')
+module.trait.corr.pvals <- corPvalueStudent(module.trait.corr, nSamples)
+
+# Heat map v2 (from WGCNA tutorial)
+textMatrix =  paste(signif(module.trait.corr, 2), "\n(",
+                    signif(module.trait.corr.pvals, 1), ")", sep = "")
+dim(textMatrix) = dim(module.trait.corr)
+
+
+
+par(mar = c(6, 8.5, 3, 3));
+labeledHeatmap(Matrix = module.trait.corr,
+               xLabels = colnames(module.trait.corr),
+               yLabels = rownames(module.trait.corr),
+               ySymbols = rownames(module.trait.corr),
+               colorLabels = FALSE,
+               colors = blueWhiteRed(50),
+               textMatrix = textMatrix,
+               textAdj = c(0.5, 0.5),
+               setStdMargins = FALSE,
+               cex.lab.y = 0.6,
+               cex.text = 0.7,
+               zlim = c(-1,1),
+               main = paste("Module-trait relationships"))
+
+
+
+# get number of genes for each module
+table(bwnet$colors)
+
+#Tag genes with module membership and store it in a table
+module.gene.mapping <- as.data.frame(bwnet$colors)
+module.gene.mapping
+
+```
+
+
+
+
+Significance in brackets shows how significantly associated the module (cluster of genes) is the trait of interest  
+Find modules that have significant association with disease state
+
+Calculate the module membership and the associated p-values
+The module membership/intramodular connectivity is calculated as the correlation of the eigengene and the gene expression profile.
+This quantifies the similarity of all genes on the array to every module.
+
+Using the gene significance you can identify genes that have a high significance for trait of interest 
+Using the module membership measures you can identify genes with high module membership in interesting modules.
+
+# Gene Significance at the Early Pc-lupin interaction
+
+```{r}
+# Define a gene significance variable for Early
+GS.Early <- as.numeric(cor(norm.counts, traits$data.Early.vs.all, use = "p"))
+
+# This translates the numeric values into colors
+GS.stage_earlyColor = numbers2colors(GS.Early, signed = T)
+blocknumber = 1
+
+moduleLabelsAutomatic = bwnet$colors
+# Convert labels to colors for plotting
+moduleColorsAutomatic = labels2colors(moduleLabelsAutomatic)
+
+datColors = data.frame(bwnet$colors, GS.stage_earlyColor)[bwnet$blockGenes[[blocknumber]], 
+    ]
+
+# Plot the dendrogram and the module colors underneath
+plotDendroAndColors(bwnet$dendrograms[[blocknumber]], colors = datColors, groupLabels = c("Module colors", 
+    "GS.stage.Early"), dendroLabels = FALSE, hang = 0.03, addGuide = TRUE, guideHang = 0.05)
+```
+
+```{r}
+datKME <- signedKME(norm.counts, module_eigengenes)
+
+# Measure the correlation of the gene's module membership and the associated p-values
+module.membership.measure <- cor(module_eigengenes, norm.counts, use = 'p')
+module.membership.measure.pvals <- corPvalueStudent(module.membership.measure, nSamples)
+
+# Calculate the gene significance and associated p-values
+early.gene.signf.corr <- cor(norm.counts, traits$data.Early.vs.all, use = 'p')
+early.gene.signf.corr.pvals <- corPvalueStudent(early.gene.signf.corr, nSamples)
+
+
+colorOfColumn = substring(names(datKME), 4)
+#selectModules = c("brown", "magenta", "blue", "turquoise", "lightcyan")
+selectModules = colorOfColumn[colorOfColumn !="grey"]
+
+#par(mfrow = c(4, length(selectModules)/4))
+  for (module in selectModules) {
+      column = match(module, colorOfColumn)
+      restModule = moduleColorsAutomatic == module
+      verboseScatterplot(datKME[restModule, column], GS.Early[restModule], xlab = paste("Module Membership", 
+          module, "module"), ylab = "GS.stage_Early", main = paste("kME.", module, 
+          "vs. GS"), col = module)
+  }
+```
+
+```{r, Earlyeginengenes}
+earlygs <- early.gene.signf.corr %>% 
+  as.data.frame() %>%
+  tibble::rownames_to_column("gene_id") 
+
+earlygsid <- dplyr::right_join(pc.annotations, earlygs, by = 'gene_id')
+
+datKme.id <- as.data.frame(datKME) %>%
+  rownames_to_column("gene_id") 
+
+earlyeiginengene <- dplyr::right_join(earlygsid, datKme.id, by = 'gene_id')
+```
+
+# Gene Significance at the Mid Pc-lupin interaction
+
+```{r}
+# Define a gene significance variable for Early
+GS.mid <- as.numeric(cor(norm.counts, traits$data.Middle.vs.all, use = "p"))
+
+# This translates the numeric values into colors
+GS.stage_midColor = numbers2colors(GS.mid, signed = T)
+blocknumber = 1
+
+moduleLabelsAutomatic = bwnet$colors
+# Convert labels to colors for plotting
+moduleColorsAutomatic = labels2colors(moduleLabelsAutomatic)
+
+datColors = data.frame(bwnet$colors, GS.stage_midColor)[bwnet$blockGenes[[blocknumber]], 
+    ]
+
+# Plot the dendrogram and the module colors underneath
+plotDendroAndColors(bwnet$dendrograms[[blocknumber]], colors = datColors, groupLabels = c("Module colors", 
+    "GS.mid"), dendroLabels = FALSE, hang = 0.03, addGuide = TRUE, guideHang = 0.05)
+```
+```{r}
+datKME <- signedKME(norm.counts, module_eigengenes)
+
+# Measure the correlation of the gene's module membership and the associated p-values
+module.membership.measure <- cor(module_eigengenes, norm.counts, use = 'p')
+module.membership.measure.pvals <- corPvalueStudent(module.membership.measure, nSamples)
+
+# Calculate the gene significance and associated p-values
+mid.gene.signf.corr <- cor(norm.counts, traits$data.Middle.vs.all, use = 'p')
+mid.gene.signf.corr.pvals <- corPvalueStudent(mid.gene.signf.corr, nSamples)
+
+
+colorOfColumn = substring(names(datKME), 4)
+#selectModules = c("red", "tan", "salmon","green", "magenta")
+selectModules = colorOfColumn[colorOfColumn !="grey"]
+
+#par(mfrow = c(3, length(selectModules)/3))
+  for (module in selectModules) {
+      column = match(module, colorOfColumn)
+      restModule = moduleColorsAutomatic == module
+      verboseScatterplot(datKME[restModule, column], GS.mid[restModule], xlab = paste("Module Membership", 
+          module, "module"), ylab = "GS.stage_mid", main = paste("kME.", module, 
+          "vs. GS"), col = module)
+  }
+```
+
+```{r}
+midgs <- mid.gene.signf.corr %>% 
+  as.data.frame() %>%
+  tibble::rownames_to_column("gene_id") 
+
+midgsid <- dplyr::right_join(Pcgenenames, midgs, by = 'gene_id')
+
+datKme.id <- as.data.frame(datKME) %>%
+  rownames_to_column("gene_id") 
+
+mideiginengene <- dplyr::right_join(midgsid, datKme.id, by = 'gene_id')
+```
+
+# Gene Significance at the Late Pc-lupin interaction
+
+```{r}
+# Define a gene significance variable for Early
+GS.late <- as.numeric(cor(norm.counts, traits$data.Late.vs.all, use = "p"))
+
+# This translates the numeric values into colors
+GS.stage_lateColor = numbers2colors(GS.late, signed = T)
+blocknumber = 1
+
+moduleLabelsAutomatic = bwnet$colors
+# Convert labels to colors for plotting
+moduleColorsAutomatic = labels2colors(moduleLabelsAutomatic)
+
+datColors = data.frame(bwnet$colors, GS.stage_lateColor)[bwnet$blockGenes[[blocknumber]], 
+    ]
+
+# Plot the dendrogram and the module colors underneath
+plotDendroAndColors(bwnet$dendrograms[[blocknumber]], colors = datColors, groupLabels = c("Module colors", 
+    "GS.stage.Late"), dendroLabels = FALSE, hang = 0.03, addGuide = TRUE, guideHang = 0.05)
+```
+
+```{r}
+datKME <- signedKME(norm.counts, module_eigengenes)
+
+# Measure the correlation of the gene's module membership and the associated p-values
+module.membership.measure <- cor(module_eigengenes, norm.counts, use = 'p')
+module.membership.measure.pvals <- corPvalueStudent(module.membership.measure, nSamples)
+
+# Calculate the gene significance and associated p-values
+late.gene.signf.corr <- cor(norm.counts, traits$data.Late.vs.all, use = 'p')
+late.gene.signf.corr.pvals <- corPvalueStudent(late.gene.signf.corr, nSamples)
+
+
+colorOfColumn = substring(names(datKME), 4)
+
+#selectModules = c("green", "turquoise", "blue", "grey60", "salmon")
+selectModules = colorOfColumn[colorOfColumn !="grey"]
+
+#par(mfrow = c(3, length(selectModules)/3))
+  for (module in selectModules) {
+      column = match(module, colorOfColumn)
+      restModule = moduleColorsAutomatic == module
+      verboseScatterplot(datKME[restModule, column], GS.late[restModule], xlab = paste("Module Membership", 
+          module, "module"), ylab = "GS.stage_Late", main = paste("kME.", module, 
+          "vs. GS"), col = module)
+  }
+```
+turquoise module (Horvath cares not for the reported cor=). Instead, 
+Look at the y-axis: genes that have high positive module membership tend to be highly positively correlated with the late interaction of Pc in lupin, 
+whereas, genes with negative values in the module they have negative relations with the late interaction of Pc in lupin.
+Can select either; genes with high positive/negative GS or high kMe (hub genes) 
+
+```{r}
+lategs <- late.gene.signf.corr.pvals %>% 
+  as.data.frame() %>%
+  tibble::rownames_to_column("gene_id")
+
+lategsid <- dplyr::right_join(Pcgenenames, lategs, by = 'gene_id')
+
+datKme.id <- as.data.frame(datKME) %>%
+  rownames_to_column("gene_id") 
+
+lateeiginengene <- dplyr::right_join(lategsid, datKme.id, by = 'gene_id')
+```
+
+```{r}
+# chooseTopHubInEachModule returns the gene in each module with the highest connectivity, looking at all genes in the expression file
+
+PcHubgenes <- chooseTopHubInEachModule(norm.counts,
+                         colorh = module.gene.mapping,
+                         omitColor = "grey",
+                         power =  2,
+                         type = "signed")
+PcHubgenes 
+
+PcHubgenes.df <- PcHubgenes %>% 
+  as.data.frame(row.names = NULL, stringAsFactors = FALSE) 
+
+PcHubgenes.df <- PcHubgenes.df %>% 
+       rename("gene_id" = ".")
+
+PcHubgenes.df <- tibble::rownames_to_column(PcHubgenes.df, "module")
+
+
+PcHubgenes.df <- dplyr::right_join(pc.annotations, PcHubgenes.df, by = 'gene_id')
+PcHubgenes.df
+```
+
+```{r}
+# Heatmap of old module eigen-genes and samples
+#pdf(file="oldMEs.pdf",heigh=80,width=20)
+
+library("pheatmap")
+
+MEs <- bwnet$MEs
+rownames(MEs)=names(norm.counts[,9])
+pheatmap(MEs,cluster_col=T,cluster_row=T,show_rownames=F,show_colnames=T,fontsize=6)
+
+
+
+# Heatmap of new module eigen-genes and sample trait (e.g. Zone)
+col_ann <- colData[,c(1,4)]
+rownames(col_ann) <- col_ann$Sample
+col_ann <- data.frame(col_ann)
+col_ann$Stage <- as.factor(col_ann$Stage)
+col_ann <- col_ann[order(col_ann$Stage),]
+col_ann$sample_ID <- NULL
+head(col_ann, 9)
+ann_color <- list("col_ann" = c("Early" = "yellow",
+                                "Middle" = "green",
+                                "Late" = "blue"))
+
+data.me <- data.frame(MEs)
+data.me <- data.me[order(match(rownames(data.me), rownames(col_ann))),]
+dim(data.me)
+
+#pdf(file="newMEs.pdf",heigh=60,width=20)
+rownames(MEs)=names(colData[ ,1])
+pheatmap(data.me,cluster_col=T,cluster_row=F,show_rownames=F,
+         show_colnames=T,fontsize=6,
+         annotation_row = col_ann, annotation_colors = ann_color)
+```
+
+```{r,gmt2tbl}
+library("clusterProfiler")
+library("kableExtra")
+
+
+writeGMT <- function (object, fname ){
+  if (class(object) != "list") stop("object should be of class 'list'")
+  if(file.exists(fname)) unlink(fname)
+  for (iElement in 1:length(object)){
+    write.table(t(c(make.names(rep(names(object)[iElement],2)),object[[iElement]])),
+                sep="\t",quote=FALSE,
+                file=fname,append=TRUE,col.names=FALSE,row.names=FALSE)
+  }
+}
+
+writeGMT(object=gul,fname="goterms.gmt")
+genesets <- read.gmt("goterms.gmt")
+
+```
+
+Run clusterprofiler to do enrichment of GOred with gul gene sets.
+
+```{r,clusterprofiler1}
+bg <- gene.list
+
+head(bg)
+head(genesets)
+
+#early
+
+#green <- subset(earlyeiginengene, V1 >  0.2 & earlyeiginengene$kMEgreen> 0.7)
+#gogreen <- green$gene_id
+
+#cyan <- subset(earlyeiginengene, V1 >  0.7 & earlyeiginengene$kMEcyan> 0.7)
+#blue <- subset(earlyeiginengene, V1 >  0.7 & earlyeiginengene$kMEblue> 0.7)
+#magenta <- subset(earlyeiginengene, V1 >  0.7 & earlyeiginengene$kMEmagenta > 0.7)
+#lightcyan <- subset(earlyeiginengene, V1 >  0.7 & earlyeiginengene$kMElightcyan > 0.7)
+
+#gocyan <- cyan$gene_id
+#goblue <- blue$gene_id
+#gomagenta <- magenta$gene_id
+#lightcyango <- lightcyan$gene_id  
+  
+
+#mid
+#red <- subset(mideiginengene, V1 >  0.2 & mideiginengene$kMEred > 0.7)  
+#gored <- red$gene_id
+#tan <- subset(mideiginengene, V1 >  0.2 & mideiginengene$kMEtan> 0.7)
+#gotan <- tan$gene_id
+#green <- subset(mideiginengene, V1 >  0.2 & mideiginengene$kMEgreen> 0.7)
+#gogreen <- green$gene_id
+
+
+#late
+#turquoise <- subset(lateeiginengene, V1 >  0.7 & lateeiginengene$kMEturquoise > 0.7)
+#goturquoise <- turquoise$gene_id
+#brown <- subset(lateeiginengene, V1 >  0.5 & lateeiginengene$kMEbrown > 0.5)
+#gobrown <- brown$gene_id
+#midnightblue <- subset(lateeiginengene, V1 >  0.5 & lateeiginengene$kMEmidnightblue > 0.5)
+#gomidnightblue <- midnightblue$gene_id
+#lightcyan
+#magenta
+
+yellow <- subset(lateeiginengene, V1 >  0.2 & lateeiginengene$kMEyellow > 0.7)
+goyellow <- yellow$gene_id
+
+ora_res <- as.data.frame(enricher(gene = goyellow ,
+  universe = bg,  maxGSSize = 5000, TERM2GENE = genesets,
+  pAdjustMethod="fdr",  pvalueCutoff = 1, qvalueCutoff = 1  ))
+
+ora_res$geneID <- NULL
+ora_res <- subset(ora_res,p.adjust<0.05 & Count >=5)  
+ora_res_names <- rownames(ora_res)
+
+head(ora_res)
+
+gr <- as.numeric(sapply(strsplit(ora_res$GeneRatio,"/"),"[[",1)) /
+  as.numeric(sapply(strsplit(ora_res$GeneRatio,"/"),"[[",2))
+
+br <- as.numeric(sapply(strsplit(ora_res$BgRatio,"/"),"[[",1)) /
+  as.numeric(sapply(strsplit(ora_res$BgRatio,"/"),"[[",2))
+
+ora_res$es <- gr/br
+ora_res <- ora_res[order(-ora_res$es),]
+ora_res$Description=NULL
+
+head(ora_res) %>%
+  kbl(row.names = FALSE, caption="Top upregulated pathways in cluster") %>%
+  kable_paper("hover", full_width = F)
+
+topup2 <- rev(head(ora_res$es,10))
+names(topup2) <- rev(head(ora_res$ID,10))
+
+head(topup2)
+
+
+par(mar=c(5,20,5,1))
+
+barplot(c(topup2),
+  horiz=TRUE,las=1,cex.names=0.65,
+  main="top GO enrichments",
+  xlab="ES",
+  cex.main=0.9)
+
+mtext("ORA test")
+
+```
+Run clusterprofiler to do enrichment of GOred with gul gene sets.
+
+#```{r,clusterprofiler2}
+
+bg <- gene.list
+
+
+ora_res <- as.data.frame(enricher(gene = gogreen ,
+  universe = bg,  maxGSSize = 5000, TERM2GENE = genesets,
+  pAdjustMethod="fdr",  pvalueCutoff = 1, qvalueCutoff = 1  ))
+
+ora_res$geneID <- NULL
+ora_res <- subset(ora_res,p.adjust<0.05 & Count >=5)
+ora_res_names <- rownames(ora_res)
+
+head(ora_res)
+
+gr <- as.numeric(sapply(strsplit(ora_res$GeneRatio,"/"),"[[",1)) /
+  as.numeric(sapply(strsplit(ora_res$GeneRatio,"/"),"[[",2))
+
+br <- as.numeric(sapply(strsplit(ora_res$BgRatio,"/"),"[[",1)) /
+  as.numeric(sapply(strsplit(ora_res$BgRatio,"/"),"[[",2))
+
+ora_res$es <- gr/br
+ora_res <- ora_res[order(-ora_res$es),]
+ora_res$Description=NULL
+
+head(ora_res) %>%
+  kbl(row.names = FALSE, caption="Top upregulated pathways in cluster") %>%
+  kable_paper("hover", full_width = F)
+
+topup2 <- rev(head(ora_res$es,10))
+names(topup2) <- rev(head(ora_res$ID,10))
+
+head(topup2)
+
+
+par(mar=c(5,20,5,1))
+
+barplot(c(topup2),
+  horiz=TRUE,las=1,cex.names=0.65,
+  main="top GO enrichments",
+  xlab="ES",
+  cex.main=0.9)
+
+mtext("ORA test")
+
+#```
+
+#```{r}
+module_df <- data.frame(
+  gene_id = names(bwnet$colors),
+  colors = labels2colors(bwnet$colors)
+)
+
+modules.of.interest <- c("red", "tan", "green", "black")
+
+submod <- module_df %>%
+  subset(colors %in% modules.of.interest)
+
+row.names(module_df) = module_df$gene_id
+
+subexpr = norm.counts %>%
+  t() 
+
+subexpr = subexpr[submod$gene_id,]
+
+submod_df = data.frame(subexpr) %>%
+  mutate(
+    gene_id = row.names(.)
+  ) %>%
+  pivot_longer(-gene_id) %>%
+  mutate(
+    module = module_df[gene_id,]$colors
+  )
+
+submod_df %>% ggplot(., aes(x=name, y=value, group=gene_id)) +
+  geom_line(aes(color = module),
+            alpha = 0.2) +
+  theme_bw() +
+  theme(
+    axis.text.x = element_text(angle = 90)
+  ) +
+  facet_grid(rows = vars(module)) +
+  labs(x = "treatment",
+       y = "normalized expression")
+
+#```
+
+# Export to Cytoscape
+
+#```{r}
+load("pc_TOM-block.1.RData")
+
+
+TOM.mat = as.matrix(TOM)
+# choose module
+module = "cyan"
+# get list of genes
+probes = names(as.data.frame(norm.counts))
+
+moduleColors = labels2colors(bwnet$colors)
+
+inModule <- (moduleColors==module)
+modProbes = probes[inModule]
+# Select the corresponding Topological Overlap
+modTOM = TOM.mat[inModule, inModule]
+
+# Export the network into edge and node list files for Cytoscape
+cyt = exportNetworkToCytoscape(modTOM,
+  edgeFile=paste("CytoEdge",paste(module,collapse="-"),".txt",sep=""),
+  nodeFile=paste("CytoNode",paste(module,collapse="-"),".txt",sep=""),
+  weighted = TRUE, threshold = 0.02,nodeNames=modProbes,
+  nodeAttr = moduleColors[inModule])
+#```
+
+#```{r}
+edge.annotation <- as.data.frame(apply(pc.annotations,              # Remove spaces within protein ID 
+                                 2,
+                                 function(x) gsub("\\s+", "", x)))
+edge.annotation                                           
+
+edge <- read.delim("CytoEdgelightgreen.txt")
+colnames(edge)
+colnames(edge) <- c("source", "target","weight","direction","fromAltName","toAltName")
+
+node <- read.delim("CytoNodelightgreen.txt")
+colnames(node)  
+colnames(node) <- c("gene_id","altName","node_attributes") 
+nodeID <- dplyr::right_join(edge.annotation, node, by = 'gene_id')
+nodeID
+
+write.csv(nodeID, file = 'lightgreennode.txt')
+#```
+
+
+
+### Session Information
+
+```{r Session Info, echo=FALSE}
+sessionInfo()
+```
