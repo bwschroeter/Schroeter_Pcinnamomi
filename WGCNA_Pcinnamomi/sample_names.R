@@ -42,12 +42,15 @@ Stage <- c("Control", "Control", "Control",
            "Middle", "Middle", "Middle", 
            "Late", "Late", "Late")
 
+Replicate <- c("BC1", "BC2", "BC3", "1", "2", "3", "1", "2", "3", "1", "2", "3")
+
 
 sample_info <- data.frame(V1,
                       Sample,
                       Treatment, 
                       Time,
                       Stage,
+                      Replicate, 
                       stringsAsFactors = F)
                              
 

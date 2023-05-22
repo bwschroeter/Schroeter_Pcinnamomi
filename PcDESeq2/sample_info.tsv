@@ -1,0 +1,25 @@
+V1	Sample	Treatment	Time	Stage	Replicate
+1	BS01	LaH0_1	Untreated	0h	Control	BC1
+2	BS02	LaH0_2	Untreated	0h	Control	BC2
+3	BS03	LaH0_3	Untreated	0h	Control	BC3
+4	BS04	LaH18_1	Untreated	18h	Early	1
+5	BS05	LaH18_2	Untreated	18h	Early	2
+6	BS06	LaH18_3	Untreated	18h	Early	3
+7	BS07	LaH30_1	Untreated	30h	Middle	1
+8	BS08	LaH30_2	Untreated	30h	Middle	2
+9	BS09	LaH30_3	Untreated	30h	Middle	3
+10	BS010	LaH48_1	Untreated	48h	Late	1
+11	BS011	LaH48_2	Untreated	48h	Late	2
+12	BS012	LaH48_3	Untreated	48h	Late	3
+13	BS013	PcHyp_1	Control	0h	Vegetative	BC1
+14	BS014	PcHyp_2	Control	0h	Vegetative	BC2
+15	BS015	PcHyp_3	Control	0h	Vegetative	BC3
+16	BS016	LaPc18_1	Treated	18h	Early	1
+17	BS017	LaPc18_2	Treated	18h	Early	2
+18	BS018	LaPc18_3	Treated	18h	Early	3
+19	BS019	LaPc30_1	Treated	30h	Middle	1
+20	BS020	LaPc30_2	Treated	30h	Middle	2
+21	BS021	LaPc30_3	Treated	30h	Middle	3
+22	BS022	LaPc48_1	Treated	48h	Late	1
+23	BS023	LaPc48_2	Treated	48h	Late	2
+24	BS024	LaPc48_3	Treated	48h	Late	3

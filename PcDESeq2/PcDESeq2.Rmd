@@ -1,0 +1,174 @@
+---
+title: "PcDESeq2"
+author: "BWSchroeter"
+date: "2023-05-22"
+output: html_document
+---
+
+```{r, load libraries, include=FALSE}
+
+library("kableExtra")
+library(WGCNA)
+library(DESeq2)
+library(GEOquery)
+library(tidyverse)
+library(gridExtra)
+library(reshape2)
+library(rtracklayer)
+library(dplyr)
+library(edgeR)
+library(clusterProfiler)
+library(pheatmap)
+library(RColorBrewer)
+```
+
+Upload files
+
+```{r}
+coldata <- read.table('sample_info.tsv')
+Pcgenenames <- read.table('pcgeneids.tsv', row.names = 1, quote = "", sep='\t', fill = TRUE, header = TRUE)
+IUM83Tanjilcountmatrix <- read.table('countmatrix.tsv') 
+
+```
+
+Clean countmatrix for P. cinnamomi analysis
+
+```{r}
+collabels <- colnames(IUM83Tanjilcountmatrix) <- (coldata$Sample)
+colnames(IUM83Tanjilcountmatrix) <- collabels
+
+IUM83Tanjilcountmatrix <- tibble::rownames_to_column(IUM83Tanjilcountmatrix, "gene_id")
+
+IUM83CountMatrix <- IUM83Tanjilcountmatrix %>% 
+  filter(str_detect(gene_id, "IUM83")) 
+  
+rownames(IUM83CountMatrix) <- IUM83CountMatrix$gene_id
+IUM83CountMatrix <- IUM83CountMatrix [ ,-1]
+IUM83CountMatrix <- as.data.frame(IUM83CountMatrix)
+IUM83CountMatrix <- IUM83CountMatrix[ ,-(1:12)]
+
+head(IUM83CountMatrix)
+#write.table(IUM83CountMatrix, file = "Pc_countmatrix.tsv",quote=FALSE,sep="\t")
+```
+```{r}
+
+summary(IUM83CountMatrix)
+par(mar = c(8, 4, 4, 1) + 0.1)
+barplot(colSums(IUM83CountMatrix)/1e6, las = 3)
+```
+
+
+```{r}
+IUM83LogCountMatrix <- log2(1+IUM83CountMatrix)
+
+hist(IUM83LogCountMatrix, br = 100)
+
+```
+
+Clean coldata for Deseq2 normalisation
+
+```{r}
+colData <- coldata %>% 
+  filter(str_detect(Sample, "Pc"))
+
+rownames(colData) <- colData$Sample
+colData <- colData [ ,-1] 
+
+
+# making sure the row names in colData matches to column names in counts_data
+all(colnames(IUM83CountMatrix) %in% rownames(colData))
+```
+
+```{r}
+# Create sample information
+sampleNames <- colData$Sample
+condition <- colData$Stage
+timepoint <- colData$Time
+
+colDATA <- data.frame(sampleNames,
+                      condition,
+                      timepoint,
+                      stringsAsFactors = T)
+
+
+# Create the DESeqDataSet object
+dds <- DESeqDataSetFromMatrix(countData = IUM83CountMatrix,
+                              colData = colDATA,
+                              design = ~ condition)
+
+
+nrow(dds)
+dds <- dds[rowMeans(counts(dds)) >10,]
+nrow(dds)
+
+```
+
+```{r}
+vsd <- vst(dds, blind = FALSE)
+head(assay(vsd), 3)
+
+rld <- rlog(dds, blind = FALSE)
+head(assay(rld), 3)
+                    
+```
+
+```{r}
+ds <- estimateSizeFactors(dds)
+
+df <- bind_rows(
+  as.data.frame(log2(counts(dds, normalized=F)[, 1:2]+1)) %>%
+         mutate(transformation = "log2(x + 1)"),
+  as.data.frame(assay(vsd)[, 1:2]) %>% mutate(transformation = "vst"),
+  as.data.frame(assay(rld)[, 1:2]) %>% mutate(transformation = "rlog"))
+  
+colnames(df)[1:2] <- c("x", "y")  
+
+lvls <- c("log2(x + 1)", "vst", "rlog")
+df$transformation <- factor(df$transformation, levels=lvls)
+
+ggplot(df, aes(x = x, y = y)) + geom_hex(bins = 80) +
+  coord_fixed() + facet_grid( . ~ transformation) 
+```
+
+```{r}
+sampleDists <- dist(t(assay(rld)))
+sampleDists
+
+sampleDistMatrix <- as.matrix( sampleDists )
+rownames(sampleDistMatrix) <- paste( vsd$dex, vsd$cell, sep = " - " )
+colnames(sampleDistMatrix) <- NULL
+colors <- colorRampPalette( rev(brewer.pal(9, "Blues")) )(255)
+pheatmap(sampleDistMatrix,
+         clustering_distance_rows = sampleDists,
+         clustering_distance_cols = sampleDists,
+         col = colors)
+
+```
+
+```{r}
+dds$condition <- relevel(dds$condition, ref = "Vegetative")
+
+
+dds <- DESeq(dds)
+res <- results(dds)
+res
+summary(res)
+
+res <- results(dds, contrast=condition)
+```
+```{r}
+# To compare "Early" vs "Vegetative"
+res_early_vs_vegetative <- results(dds, contrast=c("condition", "Early", "Vegetative"))
+
+# To compare "Middle" vs "Vegetative"
+res_middle_vs_vegetative <- results(dds, contrast=c("condition", "Middle", "Vegetative"))
+
+# To compare "Late" vs "Vegetative"
+res_late_vs_vegetative <- results(dds, contrast=c("condition", "Late", "Vegetative"))
+
+```
+
+
+
+
+
