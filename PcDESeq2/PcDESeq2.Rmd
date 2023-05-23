@@ -146,25 +146,207 @@ pheatmap(sampleDistMatrix,
 ```
 
 ```{r}
-dds$condition <- relevel(dds$condition, ref = "Vegetative")
-
+dds$condition <- relevel(dds$timepoint, ref = "0h")
 
 dds <- DESeq(dds)
-res <- results(dds)
-res
-summary(res)
 
-res <- results(dds, contrast=condition)
+as.data.frame(colData(dds))
 ```
+
+
 ```{r}
 # To compare "Early" vs "Vegetative"
-res_early_vs_vegetative <- results(dds, contrast=c("condition", "Early", "Vegetative"))
+res_early_vs_vegetative <- results(dds, contrast = c("condition", "18h", "0h"))
 
+# Arrange the results by p-value
+res_early_vs_vegetative <- res_early_vs_vegetative[order(res_early_vs_vegetative$pvalue), ]
+summary(res_early_vs_vegetative)
+res_early_vs_vegetative
+
+up <- rownames(subset(res_early_vs_vegetative, log2FoldChange > 0 & padj < 0.05))
+dn <- rownames(subset(res_early_vs_vegetative, log2FoldChange < 0 & padj < 0.05))
+
+# Print the number of upregulated and downregulated genes
+str(up)
+str(dn)
+
+# MA plot
+sig <- subset(res_early_vs_vegetative, padj < 0.05)
+GENESUP <- length(up)
+GENESDN <- length(dn)
+SUBHEADER <- paste(GENESUP, "up, ", GENESDN, "down")
+
+# Create the MA plot
+plot(log2(res_early_vs_vegetative$baseMean), res_early_vs_vegetative$log2FoldChange,
+     xlab = "log2 basemean", ylab = "log2 foldchange",
+     pch = 19, cex = 0.5, col = "dark gray",
+     main = "smear plot")
+points(log2(sig$baseMean), sig$log2FoldChange,
+       pch = 19, cex = 0.5, col = "red")
+mtext(SUBHEADER)
+
+# Heatmap
+# Get the top 50 most significant genes based on p-value
+top_genes <- head(res_early_vs_vegetative[order(res_early_vs_vegetative$pvalue), ], 50)
+
+# Extract the expression values for the top genes
+top_gene_expression <- assay(dds)[rownames(top_genes), ]
+
+# Create a matrix of log2-transformed expression values
+log2_expression <- log2(top_gene_expression + 1)
+
+# Set the color palette for the heatmap
+mycol <- colorRampPalette(c("blue", "white", "red"))(25)
+
+# Create the heatmap using pheatmap
+pheatmap(log2_expression, color = mycol, scale = "row",
+         cluster_rows = TRUE, cluster_cols = FALSE,
+         display_numbers = F, fontsize = 8,
+         main = "Top 50 Genes by p-value")
+
+# Extract the expression values for the top genes and select columns 1 to 6
+top_gene_expression_subset <- top_gene_expression[, 1:6]
+
+# Create a matrix of log2-transformed expression values
+log2_expression <- log2(top_gene_expression_subset + 1)
+
+# Set the color palette for the heatmap
+mycol <- colorRampPalette(c("blue", "white", "red"))(25)
+
+# Create the heatmap using pheatmap
+pheatmap(log2_expression, color = mycol, scale = "row",
+         cluster_rows = TRUE, cluster_cols = T,
+         display_numbers = F, fontsize = 8,
+         main = "Top 50 Genes by p-value")
+
+```
+
+
+```{r}
 # To compare "Middle" vs "Vegetative"
-res_middle_vs_vegetative <- results(dds, contrast=c("condition", "Middle", "Vegetative"))
+res_middle_vs_vegetative <- results(dds, contrast =c ("condition", "30h", "0h"))
+summary(res_middle_vs_vegetative)
+res_middle_vs_vegetative
+ 
+up <- rownames(subset(res_middle_vs_vegetative, log2FoldChange > 0 & padj < 0.05))
+dn <- rownames(subset(res_middle_vs_vegetative, log2FoldChange < 0 & padj < 0.05))
 
+# Print the number of upregulated and downregulated genes
+str(up)
+str(dn)
+
+# MA plot
+sig <- subset(res_middle_vs_vegetative, padj < 0.05)
+GENESUP <- length(up)
+GENESDN <- length(dn)
+SUBHEADER <- paste(GENESUP, "up, ", GENESDN, "down")
+
+# Create the MA plot
+plot(log2(res_middle_vs_vegetative$baseMean), res_middle_vs_vegetative$log2FoldChange,
+     xlab = "log2 basemean", ylab = "log2 foldchange",
+     pch = 19, cex = 0.5, col = "dark gray",
+     main = "smear plot")
+points(log2(sig$baseMean), sig$log2FoldChange,
+       pch = 19, cex = 0.5, col = "red")
+mtext(SUBHEADER)
+
+# Heatmap
+# Get the top 50 most significant genes based on p-value
+top_genes <- head(res_middle_vs_vegetative[order(res_middle_vs_vegetative$pvalue), ], 50)
+
+# Extract the expression values for the top genes
+top_gene_expression <- assay(dds)[rownames(top_genes), ]
+
+# Create a matrix of log2-transformed expression values
+log2_expression <- log2(top_gene_expression + 1)
+
+# Set the color palette for the heatmap
+mycol <- colorRampPalette(c("blue", "white", "red"))(25)
+
+# Create the heatmap using pheatmap
+pheatmap(log2_expression, color = mycol, scale = "row",
+         cluster_rows = TRUE, cluster_cols = FALSE,
+         display_numbers = F, fontsize = 8,
+         main = "Top 50 Genes by p-value")
+
+
+
+# Extract the expression values for the top genes and the selected columns (1 to 3 and 7 to 9)
+top_gene_expression_middle <- assay(dds)[rownames(top_genes), c(1:3, 7:9)]
+
+# Create a matrix of log2-transformed expression values
+log2_expression_middle <- log2(top_gene_expression_middle + 1)
+
+# Create the heatmap using pheatmap
+pheatmap(log2_expression_middle, color = mycol, scale = "row",
+         cluster_rows = TRUE, cluster_cols = T,
+         display_numbers = F, fontsize = 8,
+         main = "Top 50 Genes by p-value (Middle)")
+```
+
+
+```{r}
 # To compare "Late" vs "Vegetative"
-res_late_vs_vegetative <- results(dds, contrast=c("condition", "Late", "Vegetative"))
+res_late_vs_vegetative <- results(dds, contrast = c("condition", "48h", "0h"))
+summary(res_late_vs_vegetative)
+(res_late_vs_vegetative)
+
+up <- rownames(subset(res_late_vs_vegetative, log2FoldChange > 0 & padj < 0.05))
+dn <- rownames(subset(res_late_vs_vegetative, log2FoldChange < 0 & padj < 0.05))
+
+# Print the number of upregulated and downregulated genes
+str(up)
+str(dn)
+
+# MA plot
+sig <- subset(res_late_vs_vegetative, padj < 0.05)
+GENESUP <- length(up)
+GENESDN <- length(dn)
+SUBHEADER <- paste(GENESUP, "up, ", GENESDN, "down")
+
+# Create the MA plot
+plot(log2(res_late_vs_vegetative$baseMean), res_late_vs_vegetative$log2FoldChange,
+     xlab = "log2 basemean", ylab = "log2 foldchange",
+     pch = 19, cex = 0.5, col = "dark gray",
+     main = "smear plot")
+points(log2(sig$baseMean), sig$log2FoldChange,
+       pch = 19, cex = 0.5, col = "red")
+mtext(SUBHEADER)
+
+# Heatmaps
+# Get the top 50 most significant genes based on p-value
+top_genes <- head(res_late_vs_vegetative[order(res_late_vs_vegetative$pvalue), ], 50)
+
+# Extract the expression values for the top genes
+top_gene_expression <- assay(dds)[rownames(top_genes), ]
+
+# Create a matrix of log2-transformed expression values
+log2_expression <- log2(top_gene_expression + 1)
+
+# Set the color palette for the heatmap
+mycol <- colorRampPalette(c("blue", "white", "red"))(25)
+
+# Create the heatmap using pheatmap
+pheatmap(log2_expression, color = mycol, scale = "row",
+         cluster_rows = TRUE, cluster_cols = FALSE,
+         display_numbers = F, fontsize = 8,
+         main = "Top 50 Genes by p-value")
+
+# Extract the expression values for the top genes and the selected columns (1 to 3 and 10 to 12)
+top_gene_expression_late <- assay(dds)[rownames(top_genes), c(1:3, 10:12)]
+
+# Create a matrix of log2-transformed expression values
+log2_expression_late <- log2(top_gene_expression_late + 1)
+
+# Create the heatmap using pheatmap
+pheatmap(log2_expression_late, color = mycol, scale = "row",
+         cluster_rows = TRUE, cluster_cols = T,
+         display_numbers = TRUE, fontsize = 8,
+         main = "Top 50 Genes by p-value (Late)")
+```
+
+```{r}
+
 
 ```
 
