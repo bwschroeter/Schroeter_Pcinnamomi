@@ -152,6 +152,25 @@ dds <- DESeq(dds)
 
 as.data.frame(colData(dds))
 ```
+```{r}
+PCA <- plotPCA(rld, c("timepoint", "sampleNames"), returnData = TRUE)
+percentVar <- round(100 * attr(PCA, "percentVar"))
+
+ggplot(PCA, aes(PC1, PC2, color = condition)) +
+  geom_point(size = 5) +
+  geom_point(shape = 21, fill = "transparent", colour = "black", size = 5) +
+  xlab(paste0("PC1: ", percentVar[1], "% variance")) +
+  ylab(paste0("PC2: ", percentVar[2], "% variance")) +
+  coord_fixed() +
+  theme_bw() +
+  theme(axis.line = element_line(color = "black"),
+        panel.border = element_rect(color = "black"),
+        panel.grid.major = element_line(color = "black"),
+        panel.grid.minor = element_blank(),
+        legend.key = element_rect(fill = "transparent"),  # Remove border for legend objects
+        legend.key.size = unit(1, "lines"))  # Increase the size of the legend key
+
+```
 
 
 ```{r}
@@ -317,37 +336,102 @@ mtext(SUBHEADER)
 # Get the top 50 most significant genes based on p-value
 top_genes <- head(res_late_vs_vegetative[order(res_late_vs_vegetative$pvalue), ], 50)
 
-# Extract the expression values for the top genes
-top_gene_expression <- assay(dds)[rownames(top_genes), ]
-
-# Create a matrix of log2-transformed expression values
-log2_expression <- log2(top_gene_expression + 1)
-
-# Set the color palette for the heatmap
-mycol <- colorRampPalette(c("blue", "white", "red"))(25)
-
-# Create the heatmap using pheatmap
-pheatmap(log2_expression, color = mycol, scale = "row",
-         cluster_rows = TRUE, cluster_cols = FALSE,
-         display_numbers = F, fontsize = 8,
-         main = "Top 50 Genes by p-value")
-
 # Extract the expression values for the top genes and the selected columns (1 to 3 and 10 to 12)
 top_gene_expression_late <- assay(dds)[rownames(top_genes), c(1:3, 10:12)]
 
 # Create a matrix of log2-transformed expression values
 log2_expression_late <- log2(top_gene_expression_late + 1)
 
+mycol <- colorRampPalette(c("yellow", "white"))(25)
+
+pheatmap(log2_expression_late, color = mycol, scale = "row",
+         cluster_rows = TRUE, cluster_cols = TRUE,
+         display_numbers = FALSE, fontsize = 12,
+         main = "Top 50 Genes by p-value (Late)",
+         cellwidth = 10, cellheight = 20,
+         fontsize_row = 12, fontsize_col = 12,
+         fontfamily = "Arial", fontface = "bold")
+
 # Create the heatmap using pheatmap
 pheatmap(log2_expression_late, color = mycol, scale = "row",
          cluster_rows = TRUE, cluster_cols = T,
-         display_numbers = TRUE, fontsize = 8,
-         main = "Top 50 Genes by p-value (Late)")
+         display_numbers = F, fontsize = 8,
+         main = "Top 50 Genes by p-value (Late)",
+         )
+```
+```{r}
+earlyup <- rownames(subset(res_early_vs_vegetative, log2FoldChange > 2 & padj < 0.05))
+midup <- rownames(subset(res_middle_vs_vegetative, log2FoldChange > 2 & padj < 0.05))
+lateup <- rownames(subset(res_late_vs_vegetative, log2FoldChange > 2 & padj < 0.05))
+
+venn_list <- list(
+  "Early" = earlyup,
+  "Middle" = midup,
+  "Late" = lateup
+)
+
+vennColors <- c("skyblue1", "mediumorchid1", "lightgreen")
+venn.plot <- venn.diagram(
+  venn_list,
+  filename = NULL,
+  col = vennColors,
+  fill = vennColors,
+  alpha = 0.5,
+  label.col = "black",
+  cex = 0.8,
+  fontfamily = "sans",
+  cat.col = vennColors,
+  cat.cex = 0.8,
+  cat.fontfamily = "sans"
+)
+
+# Save the plot as an image
+png("venn_diagram_up.png", width = 800, height = 600)
+grid.draw(venn.plot)
 ```
 
+
 ```{r}
+earlydn <- rownames(subset(res_early_vs_vegetative, log2FoldChange < 2 & padj < 0.05))
+middn <- rownames(subset(res_middle_vs_vegetative, log2FoldChange < 2 & padj < 0.05))
+latedn <- rownames(subset(res_late_vs_vegetative, log2FoldChange < 2 & padj < 0.05))
+
+venn_list <- list(
+  "Early" = earlydn,
+  "Middle" = middn,
+  "Late" = latedn
+)
+
+vennColors <- c("skyblue1", "mediumorchid1", "lightgreen")
+venn.plot <- venn.diagram(
+  venn_list,
+  filename = NULL,
+  col = vennColors,
+  fill = vennColors,
+  alpha = 0.5,
+  label.col = "black",
+  cex = 0.8,
+  fontfamily = "sans",
+  cat.col = vennColors,
+  cat.cex = 0.8,
+  cat.fontfamily = "sans"
+)
+
+# Save the plot as an image
+png("venn_diagram_down.png", width = 800, height = 600)
+grid.draw(venn.plot)
+dev.off()
+
+```
 
 
+
+```{r, Mitch output}
+earlymitch <- as.data.frame(res_early_vs_vegetative)
+midmitch <- as.data.frame(res_middle_vs_vegetative)
+latemitch <- as.data.frame(res_late_vs_vegetative)
+
+save(earlymitch, midmitch, latemitch, file = "PcMitch.RData")
 ```
 
 
