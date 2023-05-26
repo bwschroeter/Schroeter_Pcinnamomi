@@ -73,29 +73,31 @@ head(y,3)
 
 ```{r,calc1,results="hide"}
 # prioritisation by significance
-res<-mitch_calc(y,genesets,priority="significance",cores=2)
+ressig<-mitch_calc(y,genesets,priority="significance", minsetsize = 5, cores=2)
 ```
 ```{r,calc2}
 # peek at the results
-head(res$enrichment_result)
+head(ressig$enrichment_result)
 ```
+
 ```{r,calc3,results="hide"}
 # prioritisation by effect size
-res<-mitch_calc(y,genesets,priority="effect",cores=2)
+reseffect<-mitch_calc(y,genesets,priority="effect", minsetsize = 5, cores=2)
 ```
 ```{r,calc4}
-head(res$enrichment_result)
+head(reseffect$enrichment_result)
 ```
+
 ```{r,calc5,results="hide"}
 # prioritisation by SD
-res<-mitch_calc(y,genesets,priority="SD",cores=2)
+resSD<-mitch_calc(y,genesets,priority="SD", minsetsize = 5, cores=2)
 ```
 
 By default, in downstream visualisation steps, charts are made from the top 50 gene sets, but this can be 
 modified using the resrows option.
 
 ```{r,calc6,results="hide"}
-head(res$enrichment_result)
+head(resSD$enrichment_result)
 ```
 
 ## Generate a HTML report
@@ -104,7 +106,10 @@ which are useful as a first-pass visualisation. These can be generated like
 this:
 
 ```{r,report,results="hide"}
-mitch_report(res,"Pcreport.html")
+mitch_report(ressig,"PcSIGNIFICANCEreport.html")
+mitch_report(reseffect,"PcEFFECTreport.html")
+mitch_report(resSD,"PcSDreport.html")
+
 ```
 
 ## Generate high resolution plots
