@@ -145,13 +145,7 @@ pheatmap(sampleDistMatrix,
 
 ```
 
-```{r}
-dds$condition <- relevel(dds$timepoint, ref = "0h")
 
-dds <- DESeq(dds)
-
-as.data.frame(colData(dds))
-```
 ```{r}
 PCA <- plotPCA(rld, c("timepoint", "sampleNames"), returnData = TRUE)
 percentVar <- round(100 * attr(PCA, "percentVar"))
@@ -171,7 +165,49 @@ ggplot(PCA, aes(PC1, PC2, color = condition)) +
         legend.key.size = unit(1, "lines"))  # Increase the size of the legend key
 
 ```
+```{r}
+sampleDists <- dist(t(assay(vsd)))
+sampleDists
 
+sampleDistMatrix <- as.matrix( sampleDists )
+rownames(sampleDistMatrix) <- paste( vsd$dex, vsd$cell, sep = " - " )
+colnames(sampleDistMatrix) <- NULL
+colors <- colorRampPalette( rev(brewer.pal(9, "Blues")) )(255)
+pheatmap(sampleDistMatrix,
+         clustering_distance_rows = sampleDists,
+         clustering_distance_cols = sampleDists,
+         col = colors)
+
+```
+
+
+```{r}
+PCA <- plotPCA(vsd, c("timepoint", "sampleNames"), returnData = TRUE)
+percentVar <- round(100 * attr(PCA, "percentVar"))
+
+ggplot(PCA, aes(PC1, PC2, color = condition)) +
+  geom_point(size = 5) +
+  geom_point(shape = 21, fill = "transparent", colour = "black", size = 5) +
+  xlab(paste0("PC1: ", percentVar[1], "% variance")) +
+  ylab(paste0("PC2: ", percentVar[2], "% variance")) +
+  coord_fixed() +
+  theme_bw() +
+  theme(axis.line = element_line(color = "black"),
+        panel.border = element_rect(color = "black"),
+        panel.grid.major = element_line(color = "black"),
+        panel.grid.minor = element_blank(),
+        legend.key = element_rect(fill = "transparent"),  # Remove border for legend objects
+        legend.key.size = unit(1, "lines"))  # Increase the size of the legend key
+
+```
+
+```{r}
+dds$condition <- relevel(dds$timepoint, ref = "0h")
+
+dds <- DESeq(dds)
+
+as.data.frame(colData(dds))
+```
 
 ```{r}
 # To compare "Early" vs "Vegetative"
@@ -424,17 +460,21 @@ dev.off()
 
 ```
 
-
-
 ```{r, Mitch output}
 earlymitch <- as.data.frame(res_early_vs_vegetative)
 midmitch <- as.data.frame(res_middle_vs_vegetative)
 latemitch <- as.data.frame(res_late_vs_vegetative)
 
-save(earlymitch, midmitch, latemitch, file = "PcMitch.RData")
+#save(earlymitch, midmitch, latemitch, file = "PcMitch.RData")
 ```
 
 
+```{r, Effector output}
+detectedgenes <- results(dds)
+detectedgenes <- as.data.frame(detectedgenes)
+#save(detectedgenes, file = "Pceffetor.RData")
+
+```
 
 
 
