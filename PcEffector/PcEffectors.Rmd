@@ -1,7 +1,6 @@
 ```{r, libs, message=FALSE}
 library(readxl)
 library("kableExtra")
-library(WGCNA)
 library(tidyverse)
 library(gridExtra)
 library(reshape2)
@@ -16,6 +15,8 @@ library(rtracklayer)
 
 download .faa file https://ftp.ncbi.nlm.nih.gov/genomes/genbank/protozoa/Phytophthora_cinnamomi/latest_assembly_versions/GCA_018691715.1_ASM1869171v1/GCA_018691715.1_ASM1869171v1_protein.faa.gz
 ```{r}
+setwd("~/projects/Schroeter_Pcinnamomi/PcEffector")
+
 # Read the .faa file
 faa_file <- "GCA_018691715.1_ASM1869171v1_protein.faa"  
 sequences <- readAAStringSet(faa_file, format = "fasta")
@@ -67,42 +68,81 @@ df$protein_id <- substr(df$protein_id, 1, 12)
 print(df)
 
 pcprotein.idfaa <- dplyr::right_join(df, pcprotein.id, by = 'protein_id')
+pcprotein.idfaa <- pcprotein.idfaa[, 1:4]
+head(pcprotein.idfaa)
 
 ```
 
 ```{r}
-split_fasta_chunks <- function(df, chunk_size, output_dir) {
-  # Create a list of data frames, each containing a chunk of the original data frame
-  df_chunks <- split(df, ceiling(seq_len(nrow(df)) / chunk_size))
-  
-  # Define a function to write a chunk to a FASTA file
-  write_fasta_chunk <- function(chunk, file_path) {
-    fasta_string <- paste0(">", chunk$protein_id, "\n", chunk$Sequence, "\n")
-    writeLines(fasta_string, con = file_path)
-  }
-  
-  # Write each chunk to a separate FASTA file
-  file_names <- paste0("output_", 1:length(df_chunks), ".fasta")
-  file_paths <- file.path(output_dir, file_names)
-  lapply(seq_along(df_chunks), function(i) {
-    write_fasta_chunk(df_chunks[[i]], file_paths[i])
-  })
+write_fasta <- function(df, file_path) {
+  fasta_string <- paste0(">", df$protein_id, "\n", df$Sequence, "\n")
+  writeLines(fasta_string, con = file_path)
+}
+
+generate_fasta_file <- function(df, output_file) {
+  write_fasta(df, output_file)
 }
 
 # Usage example
-output_dir <- "/mnt/data/barry/projects/Schroeter_Pcinnamomi/PcEffector/chunkoutput"  
-chunk_size <- 1000
+output_file <- "/mnt/data/barry/projects/Schroeter_Pcinnamomi/PcEffector/Raw_fasta/detected_genes.fasta"
 
-split_fasta_chunks(pcprotein.idfaa, chunk_size, output_dir)
+generate_fasta_file(pcprotein.idfaa, output_file)
+
+```
+
+# run on signalP_6.0 and import results 
+
+```{r}
+# Read the prediction_results.txt file into a data frame
+prediction_results <- read.table("prediction_results.txt", header = F, comment.char = "#", sep = "\t")
+colnames(prediction_results) <- c("protein_id", "Prediction", "OTHER", "SP(Sec/SPI)", "CS Position")
+head(prediction_results)
+
+# Filter the prediction_results data frame by "SP" in the Prediction column
+signalPsecreted <- filter(prediction_results, Prediction == "SP")
+
+# Use separate to split CS Position column
+split_results <- signalPsecreted %>%
+  separate(`CS Position`, into = c("cleavage_site", "probability"),
+           sep = "\\. ", remove = FALSE)
+
+split_results <- split_results %>%
+  mutate(cleavage_site = gsub("CS pos: ", "", cleavage_site),
+         probability = gsub("Pr: ", "", probability))
+
+head(split_results)
+
+# 1166/13594 predicted secreted/genes read of the reported 1366/19981 predicted secreted/predicted genes
+
+split_results$probability <- as.numeric(split_results$probability)
+hist(split_results$probability, main = "Probability Histogram", xlab = "Probability")
+
 ```
 
 ```{r}
-read_tsv('signalP3.0_output_1.txt')
+signalp.effector <- dplyr::right_join(pcprotein.idfaa, split_results, by = 'protein_id')
+head(signalp.effector)
+
+# Usage example
+output_file <- "/mnt/data/barry/projects/Schroeter_Pcinnamomi/PcEffector/Raw_fasta/signalPpredicted.fasta"
+
+generate_fasta_file(signalp.effector, output_file)
+
 ```
+```{r}
+# Read the summary_table.txt file with tab delimiter and skip the first 10 lines
+effector.results <- read.delim("summary_table.txt", sep = "\t", stringsAsFactors = FALSE, skip = 10)
+# Change column names
+colnames(effector.results) <- c("protein_id", "Cytoplasmic_effector", "Apoplastic_effector", "Non_effector", "Prediction")
 
+head(effector.results)
+head(pcprotein.idfaa)
 
+effector.results.id <- dplyr::right_join(pcprotein.idfaa, effector.results, by = 'protein_id')
 
+head(effector.results.id)
 
+```
 
 
 
