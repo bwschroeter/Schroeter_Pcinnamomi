@@ -2,3 +2,8 @@
 .Rhistory
 .RData
 .Ruserdata
+/Training
+/weka
+*.png
+*.log
+*.html
