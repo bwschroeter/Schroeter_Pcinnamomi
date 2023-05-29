@@ -3,6 +3,7 @@
 .RData
 .Ruserdata
 /EffectorP_3.0.0-beta
+/EffectorP_3.0.0-beta/*
 *.png
 *.log
 *.html
