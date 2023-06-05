@@ -65,7 +65,7 @@ x<-as.matrix(acast(tmp, V2~V1, value.var="V3"), stringsAsFactors = FALSE)
 colnames(x)<-sapply(strsplit(colnames(x),"_"),"[[",1)
 
 #head(x)
-#write.table(x,file="countmatrix.tsv",quote=FALSE,sep="\t")
+write.table(x,file="countmatrix.tsv",quote=FALSE,sep="\t")
 ```
 
 Import files into r
@@ -180,5 +180,22 @@ p <- timeclustplot(tca, value = "z-score(PRKM)", cols = 3)
 print(p)
 
 ```
+
+
+```{r}
+# Assuming the TCA object is named 'tca'
+# Accessing the cluster information
+cluster_info <- tca@clusterRes@cluster
+
+# Filter genes by cluster
+cluster_1_genes <- names(cluster_info[cluster_info == 1])
+cluster_2_genes <- names(cluster_info[cluster_info == 2])
+cluster_3_genes <- names(cluster_info[cluster_info == 3])
+cluster_4_genes <- names(cluster_info[cluster_info == 4])
+cluster_5_genes <- names(cluster_info[cluster_info == 5])
+cluster_6_genes <- names(cluster_info[cluster_info == 6])
+
+```
+
 
 
