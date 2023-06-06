@@ -66,12 +66,13 @@ df <- data.frame(protein_id = protein_identifiers, Sequence = sequence_strings, 
 df$protein_id <- substr(df$protein_id, 1, 12)
 
 # Print the updated data frame
-print(df)
+head(df)
 
 pcprotein.idfaa <- dplyr::right_join(df, pcprotein.id, by = 'protein_id')
 pcprotein.idfaa <- pcprotein.idfaa[, 1:4]
 head(pcprotein.idfaa)
 ```
+
 ```{r}
 #.gff file for dbCAN swap column names Name and ID
 pc.gff <- rtracklayer::import("https://ftp.ncbi.nlm.nih.gov/genomes/genbank/protozoa/Phytophthora_cinnamomi/latest_assembly_versions/GCA_018691715.1_ASM1869171v1/GCA_018691715.1_ASM1869171v1_genomic.gff.gz")
@@ -131,6 +132,7 @@ output_file <- "/mnt/data/barry/projects/Schroeter_Pcinnamomi/PcEffector/Raw_fas
 
 generate_fasta_file(df, output_file)
 
+
 ```
 
 ###
@@ -153,56 +155,38 @@ Matches for any sequences that are not represented in the lookup service will be
 05/06/2023 15:59:51:007 77% completed
 05/06/2023 16:12:19:464 100% done:  InterProScan analyses completed 
 
-
-
-###
-SignalP analysis
-###
-
-setwd("~/projects/Schroeter_Pcinnamomi/PcEffector/signalp-6.0/signalp6_fast/")
-Sys.setenv(PATH = paste("/home/barry/.local/bin", Sys.getenv("PATH"), sep = ":"))
-
-SIGNALP_DIR <- system("python3 -c 'import signalp; import os; print(os.path.dirname(signalp.__file__))'", intern = TRUE)
-
-Sys.getenv("PATH")
-
-system("signalp6 -h")
-
-system("signalp6 --fastafile ~/projects/Schroeter_Pcinnamomi/PcEffector/Raw_fasta/allpcgenes.fasta --organism eukarya --output_dir ~/projects/Schroeter_Pcinnamomi/PcEffector/SignalPall_output --format none --mode fast")
-
-
-system("signalp6 --fastafile ~/projects/Schroeter_Pcinnamomi/PcEffector/Raw_fasta/allpcgenes.fasta --organism eukarya --output_dir ~/projects/Schroeter_Pcinnamomi/PcEffector/SignalPall_output --format none --mode fast")
-Predicting: 100%|██████████| 21334/21334 [39:18<00:00,  9.05sequences/s]
-
 ```{r}
-signalpresults <- read_tsv("allpcgenes.fasta.tsv")
+interproscanresults <- read_tsv("allpcgenes.fasta.tsv")
 
 
-colnames(signalpresults) <- c("protein_id", "protein_md5", "protein_length", 
+colnames(interproscanresults) <- c("protein_id", "protein_md5", "protein_length", 
                      "analysis", "signature_id", 
                      "signature_desc", "start", "end", 
                      "score", "status", "date", 
                      "interpro_id", "interpro_desc", "go_terms")
-head(dipsr)
+head(interproscanresults)
+
+uniqueips <- distinct(interproscanresults, protein_id)
+
+print(uniqueips)
+
+
 ```
 
 ```{r}
-library(jsonlite)
-
-# Read the JSON file as text
-json_text <- readLines("/mnt/data/barry/projects/Schroeter_Pcinnamomi/PcEffector/allpcgenes.json", warn = FALSE)
 
 ```
 
 
 ```{r}
-dipsr_df <- as.data.frame(dipsr)
+signal <- grepl("signal", interproscanresults$signature_id, ignore.case = TRUE)
 
-detectedpfam <- dipsr_df %>%
-  filter(analysis == "Pfam")
+interproscanresults[signal, ]
+#extract signal peptides from interproscan res
+signalprotein <- unique(interproscanresults[interproscanresults$signature_id == "SIGNAL_PEPTIDE", "protein_id" ])
+
+
 ```
-
-
 
 ###
 bdCAN analysis
@@ -225,9 +209,31 @@ Nucleic Acids Research, 2023;, gkad328, https://doi.org/10.1093/nar/gkad328
 
 dbcanresults <- read_tsv("dbCAN_allpcgenes.txt")
 head(dbcanresults)
+
+dbcan <- dbcanresults %>%
+  filter(`#ofTools` >= 2)
+
+print(dbcan)
 ```
 
+###
+SignalP analysis
+###
 
+setwd("~/projects/Schroeter_Pcinnamomi/PcEffector/signalp-6.0/signalp6_fast/")
+Sys.setenv(PATH = paste("/home/barry/.local/bin", Sys.getenv("PATH"), sep = ":"))
+
+SIGNALP_DIR <- system("python3 -c 'import signalp; import os; print(os.path.dirname(signalp.__file__))'", intern = TRUE)
+
+Sys.getenv("PATH")
+
+system("signalp6 -h")
+
+system("signalp6 --fastafile ~/projects/Schroeter_Pcinnamomi/PcEffector/Raw_fasta/allpcgenes.fasta --organism eukarya --output_dir ~/projects/Schroeter_Pcinnamomi/PcEffector/SignalPall_output --format none --mode fast")
+
+
+system("signalp6 --fastafile ~/projects/Schroeter_Pcinnamomi/PcEffector/Raw_fasta/allpcgenes.fasta --organism eukarya --output_dir ~/projects/Schroeter_Pcinnamomi/PcEffector/SignalPall_output --format none --mode fast")
+Predicting: 100%|██████████| 21334/21334 [39:18<00:00,  9.05sequences/s]
 
 # run on signalP_6.0 and import results 
 
@@ -298,7 +304,11 @@ view(gff.raw)
 ```
 
 
+library("eulerr") 
+v1 <- list("edgeR up"=dge_edger_up, "edgeR dn"=dge_edger_dn,  "DESeq2 up"=dge_deseq2_up,"DESeq2 dn"=dge_deseq2_dn)plot(euler(v1),quantities = TRUE)
+library("eulerr")v1 <- list("vec1"=vec1, "vec2"=vec2,"vec3"=vec3)plot(euler(v1),quantities = TRUE)
 
+intersect(vec1,vec2)
 
 
 
