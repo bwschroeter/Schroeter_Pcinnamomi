@@ -72,31 +72,7 @@ pcprotein.idfaa <- dplyr::right_join(df, pcprotein.id, by = 'protein_id')
 pcprotein.idfaa <- pcprotein.idfaa[, 1:4]
 head(pcprotein.idfaa)
 ```
-
-```{r}
-#.gff file for dbCAN swap column names Name and ID
-pc.gff <- rtracklayer::import("https://ftp.ncbi.nlm.nih.gov/genomes/genbank/protozoa/Phytophthora_cinnamomi/latest_assembly_versions/GCA_018691715.1_ASM1869171v1/GCA_018691715.1_ASM1869171v1_genomic.gff.gz")
-pc.gff.df <- as.data.frame((pc.gff))
-
-pc.gff.df <- pc.gff.df %>%
-  rename('ID' = 'Name', 'Name' = 'ID')
-
-# Convert necessary columns to character type
-pc.gff.df$ID <- as.character(pc.gff.df$Name)
-pc.gff.df$Name <- as.character(pc.gff.df$ID)
-
-# Remove specified columns
-cols_to_remove <- c("collected.by", "collection.date", "country", "nat.host", "strain")
-pc.gff.df <- pc.gff.df[, !(names(pc.gff.df) %in% cols_to_remove), drop = FALSE]
-
-# Save dataframe as .gff file using fwrite
-fwrite(pc.gff.df, file = "modified_pc.gff", sep = "\t", quote = FALSE)
-
-# Save dataframe as .gff file
-fwrite(pc.gff.df, file = "modified_pc.gff", sep = "\t", quote = FALSE)
-```
-
-create .fasta for inputs
+function used to create .fasta for inputs
 
 ```{r}
 #function used to make .fasta files for analysis
@@ -132,7 +108,6 @@ output_file <- "/mnt/data/barry/projects/Schroeter_Pcinnamomi/PcEffector/Raw_fas
 
 generate_fasta_file(df, output_file)
 
-
 ```
 
 ###
@@ -158,7 +133,6 @@ Matches for any sequences that are not represented in the lookup service will be
 ```{r}
 interproscanresults <- read_tsv("allpcgenes.fasta.tsv")
 
-
 colnames(interproscanresults) <- c("protein_id", "protein_md5", "protein_length", 
                      "analysis", "signature_id", 
                      "signature_desc", "start", "end", 
@@ -168,52 +142,13 @@ head(interproscanresults)
 
 uniqueips <- distinct(interproscanresults, protein_id)
 
-print(uniqueips)
-
-
 ```
 
 ```{r}
+#extract signal peptides from interproscan results 
+interproscanSP <- unique(interproscanresults[interproscanresults$signature_id == "SIGNAL_PEPTIDE",])
 
-```
-
-
-```{r}
-signal <- grepl("signal", interproscanresults$signature_id, ignore.case = TRUE)
-
-interproscanresults[signal, ]
-#extract signal peptides from interproscan res
-signalprotein <- unique(interproscanresults[interproscanresults$signature_id == "SIGNAL_PEPTIDE", "protein_id" ])
-
-
-```
-
-###
-bdCAN analysis
-###
-
-https://bcb.unl.edu/dbCAN2/blast.php using allpcgenes.fasta
-
-check all boxes except substrate prediction
-HMMER: dbCAN (E-Value < 1e-15, coverage > 0.35)
-DIAMOND: CAZy (E-Value < 1e-102
-HMMER: dbCAN-sub (E-Value < 1e-15, coverage > 0.35)
-CGCFinder (Distance <= 2, signature genes = CAZyme+TC)
-
-Jinfang Zheng and others, dbCAN3: automated carbohydrate-active enzyme and substrate annotation, 
-Nucleic Acids Research, 2023;, gkad328, https://doi.org/10.1093/nar/gkad328
-
-
-
-```{r}
-
-dbcanresults <- read_tsv("dbCAN_allpcgenes.txt")
-head(dbcanresults)
-
-dbcan <- dbcanresults %>%
-  filter(`#ofTools` >= 2)
-
-print(dbcan)
+#3050 proteins with predicted signal peptides from 16957 proteins scanned - less than 80 amino acids not scanned by interProScan
 ```
 
 ###
@@ -251,73 +186,62 @@ split_results <- signalPsecreted %>%
   separate(`CS Position`, into = c("cleavage_site", "probability"),
            sep = "\\. ", remove = FALSE)
 
-split_results <- split_results %>%
+signalPSP <- split_results %>%
   mutate(cleavage_site = gsub("CS pos: ", "", cleavage_site),
          probability = gsub("Pr: ", "", probability))
 
-head(split_results)
+head(signalPSP)
 
-# 1166/13594 predicted secreted/genes read of the reported 1366/19981 predicted secreted/predicted genes
+#1878/21334 proteins predicted to contain a signal peptide using signalP6.0 
 
-split_results$probability <- as.numeric(split_results$probability)
+split_results$probability <- as.numeric(signalPSP$probability)
 hist(split_results$probability, main = "Probability Histogram", xlab = "Probability")
 
+#filter out low probability SP
+signalPSP.filtered <- subset(signalPSP, probability >= 0.7)
+
+#1694/1878 with a probability of 0.7 or greater
+
 ```
 
 ```{r}
-# Read the FASTA file
-fasta_data <- readDNAStringSet("signalPpredicted.fasta")
+#minus those that are OTHER in signalP (removes some ribosomal proteins)
+signalPnon <- filter(prediction_results, Prediction == "OTHER")
+# Find the common protein IDs
+common_protein_ids <- intersect(interproscanSP$protein_id, signalPnon$protein_id)
 
-# Extract the protein ID and sequence
-protein_id <- names(fasta_data)
-sequence <- as.character(fasta_data)
-
-# Create a data frame with the protein ID and sequence
-fasta_df <- data.frame(protein_id = protein_id, Sequence = sequence, stringsAsFactors = FALSE)
-```
-
-
-```{r}
-effectorp.results <- read.delim("summary_table.txt", sep = "\t", stringsAsFactors = FALSE, skip = 10)
-effectorp.results <- effectorp.results[1:(nrow(effectorp.results) - 15), ]
-colnames(effectorp.results) <- c("protein_id", "Cytoplasmic_effector", "Apoplastic_effector", "Non_effector", "Prediction")
-effectorp.results$protein_id <- gsub(" ", "", effectorp.results$protein_id)
-
-head(effectorp.results)
-
-effectorp.results.id <- dplyr::right_join(pcprotein.idfaa, effectorp.results, by = 'protein_id')
-head(effectorp.results.id)
-```
-
-```{r}
-#save .RDS including the output from signalP and effectorP to use in PcDESeq2.rmd
-
-#save(signalp.effector, effectorp.results.id, file = "secrete.effect.RData")
+# Remove the common protein IDs from the dataset
+interproscanSP <- interproscanSP[!interproscanSP$protein_id %in% common_protein_ids, ]
 
 ```
 
 
 ```{r}
-gff.raw <- readGFF("detected_genes.fasta.gff3")
-head(gff.raw)
-view(gff.raw)
+#join interproscan and signalP results together use this file for effectorP analysis
+interproscan_protein_ids <- interproscanSP$protein_id
+signalP_protein_ids <- signalPSP$protein_id
+
+combined_protein_ids <- c(interproscan_protein_ids, signalP_protein_ids)
+
+totalSP <- (unique(combined_protein_ids))
+
+SPdf <- df[df$protein_id %in% totalSP, ]
+
+#1878 genes predicted to have signal peptides
 ```
 
+###
+Known Pc effectors 
+###
 
-library("eulerr") 
-v1 <- list("edgeR up"=dge_edger_up, "edgeR dn"=dge_edger_dn,  "DESeq2 up"=dge_deseq2_up,"DESeq2 dn"=dge_deseq2_dn)plot(euler(v1),quantities = TRUE)
-library("eulerr")v1 <- list("vec1"=vec1, "vec2"=vec2,"vec3"=vec3)plot(euler(v1),quantities = TRUE)
-
-intersect(vec1,vec2)
-
-
-
-###RxLR
+RxLR
 
 Get supplementary files from https://rdcu.be/dcczO
 https://static-content.springer.com/esm/art%3A10.1186%2Fs12864-021-07552-y/MediaObjects/12864_2021_7552_MOESM2_ESM.xls
 
 ```{r, Engelbrecht supp}
+#only considered the 181 candidate RxLR -IUM83_06578-RA/RB alternatively spliced total 180 rxlr
+
 pcrxlr <- read_xls('12864_2021_7552_MOESM2_ESM.xls', 
                    sheet = 'TableS2',
                    col_names = F,
@@ -330,52 +254,154 @@ pcrxlr$gene_id <- substr(pcrxlr$gene_id, 1, nchar(pcrxlr$gene_id) - 3)
 
 as.data.frame(pcrxlr)
 
-head(pcrxlr)
+rxlr.df <- Pcgenenames %>%
+  filter(gene_id %in% pcrxlr$gene_id)
+
+head(rxlr.df)
 ```
 
 ```{r}
-rxlr.df <- dplyr::right_join(effectorp.results.id, pcrxlr, by = 'gene_id')
+#49 CRNs (45 genes, of which four have alternative transcript variants)
+
+pccrn <- read_xls('12864_2021_7552_MOESM2_ESM.xls', 
+                   sheet = 'TableS3',
+                   col_names = F,
+                   range = 'A3:A51') 
+# Rename the column
+colnames(pccrn) <- c("gene_id")
+
+# Remove the last three characters of each row
+pccrn$gene_id <- substr(pccrn$gene_id, 1, nchar(pccrn$gene_id) - 3)
+
+as.data.frame(pccrn)
+
+crn.df <- Pcgenenames %>%
+  filter(gene_id %in% pccrn$gene_id)
+
+head(crn.df)
 ```
 
-run signalP and effectorP on all genes in the .faa 
 ```{r}
-signalp.effector <- dplyr::right_join(pcprotein.idfaa, split_results, by = 'protein_id')
-head(signalp.effector)
+#61 necrosis-inducing proteins (NLPs)
 
-# output all genes
-output_file <- "/mnt/data/barry/projects/Schroeter_Pcinnamomi/PcEffector/Raw_fasta/all_genes.fasta"
+pcnlp <- read_xls('12864_2021_7552_MOESM2_ESM.xls', 
+                   sheet = 'TableS4',
+                   col_names = F,
+                   range = 'A3:A63') 
+# Rename the column
+colnames(pcnlp) <- c("gene_id")
 
-generate_fasta_file(signalp.effector, output_file)
+# Remove the last three characters of each row
+pcnlp$gene_id <- substr(pcnlp$gene_id, 1, nchar(pcnlp$gene_id) - 3)
 
-#import results from signalp
+as.data.frame(pcnlp)
+
+nlp.df <- Pcgenenames %>%
+  filter(gene_id %in% pcnlp$gene_id)
+
+head(nlp.df)
+```
+
+```{r}
+#list of know effectors based on published data 
+knowneffectors <- as.data.frame(c(nlp.df$protein_id, crn.df$protein_id, rxlr.df$protein_id))
+colnames(knowneffectors)[colnames(knowneffectors) == "c(nlp.df$protein_id, crn.df$protein_id, rxlr.df$protein_id)"] <- "protein_id"
+#add known effectors to predicted effectors
+
+allsecreted <- c(nlp.df$protein_id, crn.df$protein_id, rxlr.df$protein_id, detectedeffectors$protein_id)
 
 
-# Read the prediction_results.txt file into a data frame
-prediction_results.all <- read.table("prediction_results.all.txt", header = F, comment.char = "#", sep = "\t")
-colnames(prediction_results.all) <- c("protein_id", "Prediction", "OTHER", "SP(Sec/SPI)", "CS Position")
-head(prediction_results.all)
+output_file <- "/mnt/data/barry/projects/Schroeter_Pcinnamomi/PcEffector/allSP.fasta"
 
-# Filter the prediction_results data frame by "SP" in the Prediction column
-signalPsecreted.all <- filter(prediction_results.all, Prediction == "SP")
+generate_fasta_file(SPdf, output_file)
 
-# Use separate to split CS Position column
-split_results.all <- signalPsecreted.all %>%
-  separate(`CS Position`, into = c("cleavage_site", "probability"),
-           sep = "\\. ", remove = FALSE)
 
-split_results.all <- split_results.all %>%
-  mutate(cleavage_site = gsub("CS pos: ", "", cleavage_site),
-         probability = gsub("Pr: ", "", probability))
+```
 
-head(split_results.all)
+###
+EffectorP analysis
+###
 
-# 1166/13594 predicted secreted/genes read of the reported 1366/19981 predicted secreted/predicted genes
+```{r}
+#path to where the 
+setwd("~/projects/Schroeter_Pcinnamomi/PcEffector/EffectorP_3.0.0-beta/")
 
-split_results.all$probability <- as.numeric(split_results.all$probability)
-hist(split_results.all$probability, main = "Probability Histogram", xlab = "Probability")
+system("/home/barry/.virtualenvs/my-python/bin/python EffectorP.py -i allSP.fasta > allSP_effectorPresults.txt")
 
-#run throught effectorP
+```
+
+-----------------
+1878 proteins were provided as input in the following file: allSP.fasta
+-----------------
+Number of predicted effectors: 741
+Number of predicted cytoplasmic effectors: 379
+Number of predicted apoplastic effectors: 362
+-----------------
+39.5 percent are predicted effectors.
+20.2 percent are predicted cytoplasmic effectors.
+19.3 percent are predicted apoplastic effectors.
+-----------------
+6.3 percent of the cytoplasmic effectors are predicted dual-localized (cytoplasmic/apoplastic).
+11.3 percent of the apoplastic effectors are predicted dual-localized (apoplastic/cytoplasmic).
+-----------------
+-----------------
+
+```{r}
+effectorp.results <- read.delim("allSP_effectorPresults.txt", sep = "\t", stringsAsFactors = FALSE, skip = 10)
+effectorp.results <- effectorp.results[1:(nrow(effectorp.results) - 15), ]
+colnames(effectorp.results) <- c("protein_id", "Cytoplasmic_effector", "Apoplastic_effector", "Non_effector", "Prediction")
+effectorp.results$protein_id <- gsub(" ", "", effectorp.results$protein_id)
+
+head(effectorp.results)
+
+detectedeffectors <- dplyr::right_join(pcprotein.idfaa, effectorp.results, by = 'protein_id')
+
 ```
 
 
+
+```{r}
+#save .RDS including the output from signalP and effectorP to use in PcDESeq2.rmd
+
+#save(detectedeffectors, effectorp.results.id, file = "secrete.effect.RData")
+
+```
+
+library("eulerr") 
+v1 <- list("edgeR up"=dge_edger_up, "edgeR dn"=dge_edger_dn,  "DESeq2 up"=dge_deseq2_up,"DESeq2 dn"=dge_deseq2_dn)plot(euler(v1),quantities = TRUE)
+library("eulerr")v1 <- list("vec1"=vec1, "vec2"=vec2,"vec3"=vec3)plot(euler(v1),quantities = TRUE)
+
+intersect(vec1,vec2)
+
+
+
+
+###
+bdCAN analysis
+###
+
+https://bcb.unl.edu/dbCAN2/blast.php using allpcgenes.fasta
+
+check all boxes except substrate prediction
+HMMER: dbCAN (E-Value < 1e-15, coverage > 0.35)
+DIAMOND: CAZy (E-Value < 1e-102
+HMMER: dbCAN-sub (E-Value < 1e-15, coverage > 0.35)
+
+Jinfang Zheng and others, dbCAN3: automated carbohydrate-active enzyme and substrate annotation, 
+Nucleic Acids Research, 2023;, gkad328, https://doi.org/10.1093/nar/gkad328
+
+
+
+```{r}
+dbcanresults <- read_tsv("dbCAN_allpcgenes.txt")
+head(dbcanresults)
+
+dbcan <- dbcanresults %>%
+  filter(`#ofTools` >= 2)
+
+print(dbcan)
+
+#435 predicted CAZymes version dbCAN3.0
+#paper predicted 468 they had HMMER/Hotpep/DIAMOND  Hotpep replaced with eCAMI obsolete version dbCAN2.0
+```
 
