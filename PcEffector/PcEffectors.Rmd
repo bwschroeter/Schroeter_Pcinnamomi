@@ -308,14 +308,18 @@ knowneffectors <- as.data.frame(c(nlp.df$protein_id, crn.df$protein_id, rxlr.df$
 colnames(knowneffectors)[colnames(knowneffectors) == "c(nlp.df$protein_id, crn.df$protein_id, rxlr.df$protein_id)"] <- "protein_id"
 #add known effectors to predicted effectors
 
-allsecreted <- c(nlp.df$protein_id, crn.df$protein_id, rxlr.df$protein_id, detectedeffectors$protein_id)
+allsecreted <- unique(c(nlp.df$protein_id, crn.df$protein_id, rxlr.df$protein_id, SPdf$protein_id))
 
+allsecreted <- as.data.frame(allsecreted)
+names(allsecreted) <- "protein_id"
 
-output_file <- "/mnt/data/barry/projects/Schroeter_Pcinnamomi/PcEffector/allSP.fasta"
+allsecreted.id <- dplyr::right_join(df, allsecreted, by = 'protein_id')
 
-generate_fasta_file(SPdf, output_file)
+output_file <- "/mnt/data/barry/projects/Schroeter_Pcinnamomi/PcEffector//EffectorP_3.0.0-beta/allsecreted.fasta"
 
+generate_fasta_file(allsecreted.id, output_file)
 
+detectedsecreted.id <- dplyr::right_join(pcprotein.idfaa, allsecreted, by = 'protein_id')
 ```
 
 ###
@@ -326,7 +330,7 @@ EffectorP analysis
 #path to where the 
 setwd("~/projects/Schroeter_Pcinnamomi/PcEffector/EffectorP_3.0.0-beta/")
 
-system("/home/barry/.virtualenvs/my-python/bin/python EffectorP.py -i allSP.fasta > allSP_effectorPresults.txt")
+system("/home/barry/.virtualenvs/my-python/bin/python EffectorP.py -i allsecreted.fasta > allsecreted_effectorPresults.txt")
 
 ```
 
@@ -361,9 +365,9 @@ detectedeffectors <- dplyr::right_join(pcprotein.idfaa, effectorp.results, by = 
 
 
 ```{r}
-#save .RDS including the output from signalP and effectorP to use in PcDESeq2.rmd
+#save .RDS including predicted secreted, known effectors, and  to use in PcDESeq2.rmd
 
-#save(detectedeffectors, effectorp.results.id, file = "secrete.effect.RData")
+#save(allsecreted.id, detectedeffectors, knowneffectors, file = "secrete.effect.RData")
 
 ```
 
