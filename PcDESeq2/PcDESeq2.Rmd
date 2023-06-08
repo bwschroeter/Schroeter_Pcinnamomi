@@ -414,27 +414,72 @@ detectedgenes <- as.data.frame(detectedgenes)
 load("/mnt/data/barry/projects/Schroeter_Pcinnamomi/PcEffector/secrete.effect.RData")
 ```
 
-```{r}
-earlydetected<- as.data.frame(res_early_vs_vegetative)
+```{r, secreted expression}
+earlydetected <- as.data.frame(res_early_vs_vegetative)
 earlydetected$gene_id <- rownames(earlydetected)
 
-earlysecreted <- dplyr::right_join(earlydetected, effectorp.results.id, by = 'gene_id')
+earlysecreted <- dplyr::right_join(earlydetected, detectedeffectors, by = 'gene_id')
 
-ecyto <- subset(earlysecreted, Prediction %in% "Cytoplasmic effector")
-eapo <- subset(earlysecreted, Prediction %in% "Apoplastic effector")
-eeffector <- subset(earlysecreted, !Prediction %in% "Non-effector")
+middetected <- as.data.frame(res_middle_vs_vegetative)
+middetected$gene_id <- rownames(middetected)
 
+midsecreted <- dplyr::right_join(middetected, detectedeffectors, by = 'gene_id')
+
+latedetected <- as.data.frame(res_late_vs_vegetative)
+latedetected$gene_id <- rownames(latedetected)
+
+latesecreted <- dplyr::right_join(latedetected, detectedeffectors, by = 'gene_id')
+
+```
+
+```{r}
+
+eeup <- unique(earlysecreted[earlysecreted$log2FoldChange > 0 & earlysecreted$padj < 0.05, ])
+eeup <- eeup$gene_id
+eedn <- unique(earlysecreted[earlysecreted$log2FoldChange < 0 & earlysecreted$padj < 0.05, ])
+eedn <- eedn$gene_id
+
+meup <- unique(midsecreted[midsecreted$log2FoldChange > 0 & midsecreted$padj < 0.05, ])
+meup <- meup$gene_id
+medn <- unique(midsecreted[midsecreted$log2FoldChange < 0 & midsecreted$padj < 0.05, ])
+medn <- medn$gene_id
+
+leup <- unique(latesecreted[latesecreted$log2FoldChange > 0 & latesecreted$padj < 0.05, ])
+leup <- leup$gene_id
+ledn <- unique(latesecreted[latesecreted$log2FoldChange < 0 & latesecreted$padj < 0.05, ])
+ledn <- ledn$gene_id
+
+emups <- setdiff(eeup,meup)
+emupi <- intersect(eeup,meup)
+
+library("eulerr")
+v1 <- list("Earlyup"=eeup, "Earlydn"=eedn, "Midup"=meup, "Middn"=medn, "Lateup"=leup,"Latedn"=ledn)
+
+plot(euler(v1),quantities = TRUE, main="Secreted gene expression")
 ```
 
 
 ```{r}
+eeup <- earlysecreted$gene_id[earlysecreted$log2FoldChange > 0 & earlysecreted$padj < 0.05]
 
-res_earlyearly_secreted <- earlysecreted[order(earlysecreted$pvalue), ]
+```
 
+
+
+
+
+
+
+
+
+```{r}
 sig <- subset(res_early_vs_vegetative, padj < 0.05)
 
-eeup <- rownames(subset(eeffector, log2FoldChange > 2 & padj < 0.05))
-eedn <- rownames(subset(eeffector, log2FoldChange < 2 & padj < 0.05))
+
+eup <- subset(res_early_vs_vegetative, log2FoldChange > 0 & padj < 0.05)
+edn <- rownames(subset(res_early_vs_vegetative, log2FoldChange < 0 & padj < 0.05))
+eeup <- rownames(subset(eeffector, log2FoldChange > 0 & padj < 0.05))
+eedn <- rownames(subset(eeffector, log2FoldChange < 0 & padj < 0.05))
 
 
 EGENESUP <- length(eup)
@@ -442,6 +487,70 @@ EGENESDN <- length(edn)
 SUBHEADER <- paste("Early", EGENESUP, "up, ", EGENESDN, "down")
 
 
+library("eulerr") 
+v1 <- list("Earlydetup"=eup, "Earlydetdown"=edn,"Earlyeffectorup"=eeup,"Earlyeffectordown"=eedn)
+plot(euler(v1),quantities = TRUE)
+
+```
+```{r}
+v1 <- list("Earlydetup" = eup, "Earlydetdown" = edn, "Earlyeffectorup" = eeup, "Earlyeffectordown" = eedn, "Earlyup" = eup&eeup, "Earlydown" = edn&eedn)
+
+euler_obj <- euler(v1)
+intersecting_genes <- names(euler_obj$labels$sets)[euler_obj$labels$size > 1]
+
+plot(euler_obj, quantities = TRUE)
+
+# Add labels to the intersecting regions
+add_set_labels(euler_obj, labels = intersecting_genes, fill = "white", fontface = "bold", cex = 1.5)
+```
+```{r, euler1}
+m <- mitch_import(de,DEtype = "DEseq2", geneTable = gt)
+msep <- mitch_calc(m,genesets = genesets)
+ms_up <- subset(msep$enrichment_result,p.adjustANOVA<0.05 & s.dist > 0)[,1]
+ms_dn <- subset(msep$enrichment_result,p.adjustANOVA<0.05 & s.dist < 0)[,1]
+message(paste("Number of up-regulated pathways:",length(ms_up) ))
+message(paste("Number of down-regulated pathways:",length(ms_dn) ))
+head(msep$enrichment_result,10)  #%>% kbl() %>% kable_paper("hover", full_width = F)
+#mitch_report(msep,outfile="mitch_separate.html",overwrite=TRUE)
+
+l0 <- list("sep up"=ms_up,"sep dn"=ms_dn,"comb up"=mc_up,"comb dn"=mc_dn)
+par(cex.main=0.5)
+plot(euler(l0),quantities = TRUE, edges = "gray", main="FCS: combined vs separated")
+
+
+length(ms_up)
+length(ms_dn)
+length(ms_up)+length(ms_dn)
+
+length(mc_up)
+length(mc_dn)
+length(mc_up)+length(mc_dn)
+
+( length(ms_up)+length(ms_dn) ) / ( length(mc_up)+length(mc_dn) )
+
+
+```
+
+List gene sets which are specific to each approach.
+
+```{r,mitch_sets}
+
+ms <- c(ms_up,ms_dn)
+
+# in sep but not comb
+setdiff(ms,mc_up)
+
+# in comb but not sep
+setdiff(mc_up,ms)
+
+# intersection
+intersect(mc_up,ms)
+
+```
+```
+
+
+```{r}
 # Create the MA plot
 plot(log2(res_early_vs_vegetative$baseMean), res_early_vs_vegetative$log2FoldChange,
      xlab = "log2 basemean", ylab = "log2 foldchange",
@@ -455,6 +564,19 @@ points(log2(eeffector$baseMean), eeffector$log2FoldChange,
        pch = 19, cex = 0.5, col = "green")
 mtext(SUBHEADER)  
 ```
+
+library("eulerr") 
+v1 <- list("edgeR up"=dge_edger_up, "edgeR dn"=dge_edger_dn,"DESeq2 up"=dge_deseq2_up,"DESeq2 dn"=dge_deseq2_dn)
+plot(euler(v1),quantities = TRUE)
+
+library("eulerr")
+v1 <- list("vec1"=EGENESUP,"vec2"=vec2,"vec3"=vec3)
+plot(euler(v1),quantities = TRUE)
+
+intersect(vec1,vec2)
+
+
+
 
 Volcano plot example.
 
@@ -484,8 +606,6 @@ middetected$gene_id <- rownames(middetected)
 midsecreted <- dplyr::right_join(middetected, effectorp.results.id, by = 'gene_id')
 
 meffector <- subset(midsecreted, !Prediction %in% "Non-effector")
-
-
 
 res_mid_secreted <- midsecreted[order(midsecreted$pvalue), ]
 
@@ -520,6 +640,14 @@ points(log2(meffector$baseMean), meffector$log2FoldChange,
        pch = 19, cex = 0.5, col = "green")
 mtext(MSUBHEADER)
 ```
+
+```{r}
+library("eulerr") 
+v1 <- list("Middetup"=mup, "Middetdown"=mdn,"Mideffectorup"=meup,"Mideffectordown"=medn) 
+common_elements <- Reduce(intersect, v1)
+plot(euler(v1),quantities = TRUE)
+```
+
 
 
 ```{r,volc2}
