@@ -27,7 +27,6 @@ formatted_sequences <- paste0(">", names(sequences), "\n", as.character(sequence
 output_file <- "/mnt/data/barry/projects/Schroeter_Pcinnamomi/PcEffector/Pcgenes.fasta" 
 writeLines(formatted_sequences, output_file)
 
-
 load("Pceffetor.RData")
 
 # first rearrange cols
@@ -67,7 +66,7 @@ df$protein_id <- substr(df$protein_id, 1, 12)
 
 # Print the updated data frame
 head(df)
-
+uniqueprot <- unique(df[df$protein_id,])
 pcprotein.idfaa <- dplyr::right_join(df, pcprotein.id, by = 'protein_id')
 pcprotein.idfaa <- pcprotein.idfaa[, 1:4]
 head(pcprotein.idfaa)
@@ -113,6 +112,7 @@ generate_fasta_file(df, output_file)
 ###
 InterProScan analysis
 ###
+
 barry@ziemann-01:/mnt/data/barry/projects/Schroeter_Pcinnamomi/PcEffector/interproscan/interproscan-5.62-94.0$ ./interproscan.sh -appl CDD,PANTHER,Pfam,PROSITEPATTERNS,PROSITEPROFILES,SFLD,SMART,TIGRFAM,Phobius,TMHMM,SUPERFAMILY -i /mnt/data/barry/projects/Schroeter_Pcinnamomi/PcEffector/Raw_fasta/allpcgenes.fasta -iprlookup --goterms -b /mnt/data/barry/projects/Schroeter_Pcinnamomi/PcEffector/interproscan_output/
 05/06/2023 12:56:46:576 Welcome to InterProScan-5.62-94.0
 05/06/2023 12:56:46:577 Running InterProScan v5 in STANDALONE mode... on Linux
@@ -148,8 +148,26 @@ uniqueips <- distinct(interproscanresults, protein_id)
 #extract signal peptides from interproscan results 
 interproscanSP <- unique(interproscanresults[interproscanresults$signature_id == "SIGNAL_PEPTIDE",])
 
-#3050 proteins with predicted signal peptides from 16957 proteins scanned - less than 80 amino acids not scanned by interProScan
+#Phobius predicts 3050 proteins with predicted signal peptides from 16957 proteins scanned - less than 80 amino acids not scanned by interProScan
 ```
+
+```{r}
+interproscanTMHMM <- unique(interproscanresults[interproscanresults$signature_id == "TMhelix",])
+
+filtered_interproscanTMHMM <- interproscanTMHMM %>%
+  group_by(protein_id) %>%
+  filter(n() <= 1) %>% 
+  filter(end <= 60)
+
+#TMHMM predicts 594 proteins that aren't considered transmembrane
+```
+
+Tmhmm v.2.0 was used to predict transmembrane proteins from the combined predicted secretome (Krogh et al., 2001). If a protein contains at least one transmembrane domain after the first 60 amino acids or at least two transmembrane domains in total, it was labelled as a putative transmembrane protein.
+
+Ranking effector candidates according to their expression during infection with RNA-sequencing (RNA-seq) data or through structural similarity to known effectors are recommended practices for effector candidate prioritization.
+
+Sperschneider, J., Gardiner, D.M., Dodds, P.N., Tini, F., Covarelli, L., Singh, K.B., Manners, J.M. and Taylor, J.M. (2016), EffectorP: predicting fungal effector proteins from secretomes using machine learning. New Phytol, 210: 743-761. https://doi.org/10.1111/nph.13794
+
 
 ###
 SignalP analysis
@@ -165,7 +183,6 @@ Sys.getenv("PATH")
 system("signalp6 -h")
 
 system("signalp6 --fastafile ~/projects/Schroeter_Pcinnamomi/PcEffector/Raw_fasta/allpcgenes.fasta --organism eukarya --output_dir ~/projects/Schroeter_Pcinnamomi/PcEffector/SignalPall_output --format none --mode fast")
-
 
 system("signalp6 --fastafile ~/projects/Schroeter_Pcinnamomi/PcEffector/Raw_fasta/allpcgenes.fasta --organism eukarya --output_dir ~/projects/Schroeter_Pcinnamomi/PcEffector/SignalPall_output --format none --mode fast")
 Predicting: 100%|██████████| 21334/21334 [39:18<00:00,  9.05sequences/s]
@@ -192,7 +209,7 @@ signalPSP <- split_results %>%
 
 head(signalPSP)
 
-#1878/21334 proteins predicted to contain a signal peptide using signalP6.0 
+#1878/21334 proteins predicted to contain a Sec/SPI SPs using signalP6.0 
 
 split_results$probability <- as.numeric(signalPSP$probability)
 hist(split_results$probability, main = "Probability Histogram", xlab = "Probability")
@@ -201,20 +218,19 @@ hist(split_results$probability, main = "Probability Histogram", xlab = "Probabil
 signalPSP.filtered <- subset(signalPSP, probability >= 0.7)
 
 #1694/1878 with a probability of 0.7 or greater
-
+sprxlr <- intersect(rxlr.df$protein_id, signalPSP$protein_id)
 ```
 
 ```{r}
-#minus those that are OTHER in signalP (removes some ribosomal proteins)
-signalPnon <- filter(prediction_results, Prediction == "OTHER")
-# Find the common protein IDs
-common_protein_ids <- intersect(interproscanSP$protein_id, signalPnon$protein_id)
+#list of proteins from interproscan - phobius/tmhmm and signalP predicted to be secreted
+phobius.tmhmm.signalp <- unique(c(interproscanSP$protein_id, filtered_interproscanTMHMM$protein_id, signalPSP$protein_id))
+pts <- df[df$protein_id %in% phobius.tmhmm.signalp, ]
 
-# Remove the common protein IDs from the dataset
-interproscanSP <- interproscanSP[!interproscanSP$protein_id %in% common_protein_ids, ]
+pts.id <- dplyr::right_join(Pcgenenames, pts, by = 'protein_id')
+
+c_ids <- intersect(nlp.df$protein_id, pts.id$protein_id)
 
 ```
-
 
 ```{r}
 #join interproscan and signalP results together use this file for effectorP analysis
@@ -234,6 +250,24 @@ SPdf <- df[df$protein_id %in% totalSP, ]
 Known Pc effectors 
 ###
 
+PFAM accession associated with pathogenicity
+
+```{r}
+
+#elicitin Pfam domain (PF00964 )
+elicitin <- unique(interproscanresults[interproscanresults$signature_id == "PF00964",])
+#serine protease inhibitor Kazal-like domain (PF07648 )
+serine_protease_inhibitor <- unique(interproscanresults[interproscanresults$signature_id == "PF07648",])
+#chymotrypsin (PF00089 )
+chymotrypsin <- unique(interproscanresults[interproscanresults$signature_id == "PF00089",])
+#PAN/Apple domain (PF14295 )
+PAN_Apple <- unique(interproscanresults[interproscanresults$signature_id == "PF14295",])
+#Cathepsin propeptide inhibitor (PF08246)
+Cathspes_ininhibitor <- unique(interproscanresults[interproscanresults$signature_id == "PF08246",])
+# Lytic polysaccharide mono-oxygenase (PF03067)
+Lytic_polysaccharide_mono_oxygenase <- unique(interproscanresults[interproscanresults$signature_id == "PF03067",])
+
+```
 RxLR
 
 Get supplementary files from https://rdcu.be/dcczO
@@ -358,27 +392,10 @@ effectorp.results$protein_id <- gsub(" ", "", effectorp.results$protein_id)
 
 head(effectorp.results)
 
-detectedeffectors <- dplyr::right_join(pcprotein.idfaa, effectorp.results, by = 'protein_id')
+# make this all non effectors from effectorP
+predictedeffectors <- subset(effectorp.results, Prediction != "Non-effector")
 
 ```
-
-
-
-```{r}
-#save .RDS including predicted secreted, known effectors, and  to use in PcDESeq2.rmd
-
-#save(allsecreted.id, detectedeffectors, knowneffectors, file = "secrete.effect.RData")
-
-```
-
-library("eulerr") 
-v1 <- list("edgeR up"=dge_edger_up, "edgeR dn"=dge_edger_dn,  "DESeq2 up"=dge_deseq2_up,"DESeq2 dn"=dge_deseq2_dn)plot(euler(v1),quantities = TRUE)
-library("eulerr")v1 <- list("vec1"=vec1, "vec2"=vec2,"vec3"=vec3)plot(euler(v1),quantities = TRUE)
-
-intersect(vec1,vec2)
-
-
-
 
 ###
 bdCAN analysis
@@ -397,15 +414,40 @@ Nucleic Acids Research, 2023;, gkad328, https://doi.org/10.1093/nar/gkad328
 
 
 ```{r}
-dbcanresults <- read_tsv("dbCAN_allpcgenes.txt")
-head(dbcanresults)
+dbcanresults <- read_tsv("dbCAN_allpcgenes.txt") 
+colnames(dbcanresults)[colnames(dbcanresults) == "Gene ID"] <- "protein_id"
 
 dbcan <- dbcanresults %>%
   filter(`#ofTools` >= 2)
 
-print(dbcan)
+#which CAZymes have signal peptides
+dbcansecreted <- dplyr::right_join(detectedsecreted.id, dbcan, by = 'protein_id')
+
+dbcansecreted2 <- dbcan %>%
+  filter(protein_id %in% detectedsecreted.id$protein_id)
+
+
+dbcansecreted2$Signalp <- "Y"
+
+head(dbcansecreted)
 
 #435 predicted CAZymes version dbCAN3.0
 #paper predicted 468 they had HMMER/Hotpep/DIAMOND  Hotpep replaced with eCAMI obsolete version dbCAN2.0
+#227 predicted CAZymes have signal peptides
 ```
 
+```{r}
+#save .RDS including predicted secreted, known/predicted effectors, and CAZymes to use in PcDESeq2.rmd
+
+#save(allsecreted.id, predictedeffectors, knowneffectors, dbcansecreted, file = "secrete.effect.RData")
+
+```
+
+
+## Session information
+
+```{r,session}
+
+sessionInfo()
+
+```
