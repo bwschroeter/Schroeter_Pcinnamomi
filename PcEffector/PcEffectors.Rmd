@@ -14,6 +14,16 @@ library(rtracklayer)
 library(data.table)
 ```
 
+```{r}
+pc.gtf <- rtracklayer::import("https://ftp.ncbi.nlm.nih.gov/genomes/genbank/protozoa/Phytophthora_cinnamomi/latest_assembly_versions/GCA_018691715.1_ASM1869171v1/GCA_018691715.1_ASM1869171v1_genomic.gtf.gz")
+pc.df <- as.data.frame((pc.gtf))
+
+pc.genes <- filter(pc.df, type == "start_codon")
+```
+
+
+
+
 download .faa file https://ftp.ncbi.nlm.nih.gov/genomes/genbank/protozoa/Phytophthora_cinnamomi/latest_assembly_versions/GCA_018691715.1_ASM1869171v1/GCA_018691715.1_ASM1869171v1_protein.faa.gz
 
 ```{r}
@@ -27,6 +37,8 @@ formatted_sequences <- paste0(">", names(sequences), "\n", as.character(sequence
 output_file <- "/mnt/data/barry/projects/Schroeter_Pcinnamomi/PcEffector/Pcgenes.fasta" 
 writeLines(formatted_sequences, output_file)
 
+Pcgenenames <- read.table('pcgeneids.tsv', row.names = 1, quote = "", sep='\t', fill = TRUE, header = TRUE)
+
 load("Pceffetor.RData")
 
 # first rearrange cols
@@ -35,11 +47,9 @@ allgenes$gene_id<-rownames(allgenes)
 rownames(allgenes)<-seq(nrow(allgenes))
 head(allgenes)
 
-
 Pcgenenames <- read.table('pcgeneids.tsv', row.names = 1, quote = "", sep='\t', fill = TRUE, header = TRUE)
 
 pcprotein.id <- dplyr::right_join(Pcgenenames, allgenes, by = 'gene_id')
-
 
 # Define a list of protein IDs to extract
 protein_list <- pcprotein.id$protein_id
@@ -109,9 +119,9 @@ generate_fasta_file(df, output_file)
 
 ```
 
-###
-InterProScan analysis
-###
+#######################
+ InterProScan analysis
+#######################
 
 barry@ziemann-01:/mnt/data/barry/projects/Schroeter_Pcinnamomi/PcEffector/interproscan/interproscan-5.62-94.0$ ./interproscan.sh -appl CDD,PANTHER,Pfam,PROSITEPATTERNS,PROSITEPROFILES,SFLD,SMART,TIGRFAM,Phobius,TMHMM,SUPERFAMILY -i /mnt/data/barry/projects/Schroeter_Pcinnamomi/PcEffector/Raw_fasta/allpcgenes.fasta -iprlookup --goterms -b /mnt/data/barry/projects/Schroeter_Pcinnamomi/PcEffector/interproscan_output/
 05/06/2023 12:56:46:576 Welcome to InterProScan-5.62-94.0
@@ -160,6 +170,8 @@ filtered_interproscanTMHMM <- interproscanTMHMM %>%
   filter(end <= 60)
 
 #TMHMM predicts 594 proteins that aren't considered transmembrane
+
+filtered_interproscanTMHMM.id <- dplyr::right_join(Pcgenenames, filtered_interproscanTMHMM, by = 'protein_id')
 ```
 
 Tmhmm v.2.0 was used to predict transmembrane proteins from the combined predicted secretome (Krogh et al., 2001). If a protein contains at least one transmembrane domain after the first 60 amino acids or at least two transmembrane domains in total, it was labelled as a putative transmembrane protein.
@@ -169,9 +181,9 @@ Ranking effector candidates according to their expression during infection with 
 Sperschneider, J., Gardiner, D.M., Dodds, P.N., Tini, F., Covarelli, L., Singh, K.B., Manners, J.M. and Taylor, J.M. (2016), EffectorP: predicting fungal effector proteins from secretomes using machine learning. New Phytol, 210: 743-761. https://doi.org/10.1111/nph.13794
 
 
-###
-SignalP analysis
-###
+##################
+ SignalP analysis
+##################
 
 setwd("~/projects/Schroeter_Pcinnamomi/PcEffector/signalp-6.0/signalp6_fast/")
 Sys.setenv(PATH = paste("/home/barry/.local/bin", Sys.getenv("PATH"), sep = ":"))
@@ -218,7 +230,7 @@ hist(split_results$probability, main = "Probability Histogram", xlab = "Probabil
 signalPSP.filtered <- subset(signalPSP, probability >= 0.7)
 
 #1694/1878 with a probability of 0.7 or greater
-sprxlr <- intersect(rxlr.df$protein_id, signalPSP$protein_id)
+
 ```
 
 ```{r}
@@ -228,7 +240,16 @@ pts <- df[df$protein_id %in% phobius.tmhmm.signalp, ]
 
 pts.id <- dplyr::right_join(Pcgenenames, pts, by = 'protein_id')
 
-c_ids <- intersect(nlp.df$protein_id, pts.id$protein_id)
+```
+
+```{r}
+#minus those that are OTHER in signalP (removes some ribosomal proteins)
+signalPnon <- filter(prediction_results, Prediction == "OTHER")
+# Find the common protein IDs
+common_protein_ids <- intersect(interproscanSP$protein_id, signalPnon$protein_id)
+
+# Remove the common protein IDs from the dataset
+interproscanSP <- interproscanSP[!interproscanSP$protein_id %in% common_protein_ids, ]
 
 ```
 
@@ -246,34 +267,44 @@ SPdf <- df[df$protein_id %in% totalSP, ]
 #1878 genes predicted to have signal peptides
 ```
 
-###
-Known Pc effectors 
-###
-
-PFAM accession associated with pathogenicity
+###############################
+ Effectors from the literature 
+###############################
 
 ```{r}
+#PFAM accessions associated with pathogenicity
 
-#elicitin Pfam domain (PF00964 )
-elicitin <- unique(interproscanresults[interproscanresults$signature_id == "PF00964",])
-#serine protease inhibitor Kazal-like domain (PF07648 )
-serine_protease_inhibitor <- unique(interproscanresults[interproscanresults$signature_id == "PF07648",])
-#chymotrypsin (PF00089 )
-chymotrypsin <- unique(interproscanresults[interproscanresults$signature_id == "PF00089",])
-#PAN/Apple domain (PF14295 )
-PAN_Apple <- unique(interproscanresults[interproscanresults$signature_id == "PF14295",])
-#Cathepsin propeptide inhibitor (PF08246)
-Cathspes_ininhibitor <- unique(interproscanresults[interproscanresults$signature_id == "PF08246",])
-# Lytic polysaccharide mono-oxygenase (PF03067)
-Lytic_polysaccharide_mono_oxygenase <- unique(interproscanresults[interproscanresults$signature_id == "PF03067",])
+#elicitin Pfam domain PF00964
+PF00964 <- unique(interproscanresults[interproscanresults$signature_id == "PF00964",])
+#serine protease inhibitor Kazal-like domain PF07648
+PF07648 <- unique(interproscanresults[interproscanresults$signature_id == "PF07648",])
+#chymotrypsin PF00089 
+PF00089 <- unique(interproscanresults[interproscanresults$signature_id == "PF00089",])
+#PAN/Apple domain PF14295 
+PF14295 <- unique(interproscanresults[interproscanresults$signature_id == "PF14295",])
+#Cathepsin propeptide inhibitor PF08246
+PF08246 <- unique(interproscanresults[interproscanresults$signature_id == "PF08246",])
+# Lytic polysaccharide mono-oxygenase PF03067
+PF03067 <- unique(interproscanresults[interproscanresults$signature_id == "PF03067",])
+#Transglutaminase_elicitor PF16683 
+PF16683 <- unique(interproscanresults[interproscanresults$signature_id == "PF16683",])
+#Cysteine_rich_secretory_protein_family PF00188 
+PF00188 <- unique(interproscanresults[interproscanresults$signature_id == "PF00188",])
+#pectin degradation (PF03283, PF00544, and PF03211)
+pectin_degradation <- unique(interproscanresults[interproscanresults$signature_id == unique(c("PF03283","PF00544","PF03211")),])
+
+pfameffectors <- as.data.frame(c(PF00964$protein_id, PF07648$protein_id, PF00089$protein_id, PF14295$protein_id, PF08246$protein_id, PF03067$protein_id, PF16683$protein_id, PF00188$protein_id, pectin_degradation$protein_id))
+
+names(pfameffectors)[1] <- "protein_id"
+
+pfameffectors.id <- dplyr::right_join(Pcgenenames, pfameffectors, by = 'protein_id')
 
 ```
-RxLR
 
 Get supplementary files from https://rdcu.be/dcczO
 https://static-content.springer.com/esm/art%3A10.1186%2Fs12864-021-07552-y/MediaObjects/12864_2021_7552_MOESM2_ESM.xls
 
-```{r, Engelbrecht supp}
+```{r, Engelbrecht supp rxlr}
 #only considered the 181 candidate RxLR -IUM83_06578-RA/RB alternatively spliced total 180 rxlr
 
 pcrxlr <- read_xls('12864_2021_7552_MOESM2_ESM.xls', 
@@ -292,9 +323,10 @@ rxlr.df <- Pcgenenames %>%
   filter(gene_id %in% pcrxlr$gene_id)
 
 head(rxlr.df)
+
 ```
 
-```{r}
+```{r, Engelbrecht supp crn}
 #49 CRNs (45 genes, of which four have alternative transcript variants)
 
 pccrn <- read_xls('12864_2021_7552_MOESM2_ESM.xls', 
@@ -315,7 +347,7 @@ crn.df <- Pcgenenames %>%
 head(crn.df)
 ```
 
-```{r}
+```{r, Engelbrecht supp nlp}
 #61 necrosis-inducing proteins (NLPs)
 
 pcnlp <- read_xls('12864_2021_7552_MOESM2_ESM.xls', 
@@ -336,14 +368,18 @@ nlp.df <- Pcgenenames %>%
 head(nlp.df)
 ```
 
+#####################
+ EffectorP analysis 
+#####################
+
 ```{r}
 #list of know effectors based on published data 
 knowneffectors <- as.data.frame(c(nlp.df$protein_id, crn.df$protein_id, rxlr.df$protein_id))
-colnames(knowneffectors)[colnames(knowneffectors) == "c(nlp.df$protein_id, crn.df$protein_id, rxlr.df$protein_id)"] <- "protein_id"
+
+names(knowneffectors)[1] <- "protein_id"
 #add known effectors to predicted effectors
 
 allsecreted <- unique(c(nlp.df$protein_id, crn.df$protein_id, rxlr.df$protein_id, SPdf$protein_id))
-
 allsecreted <- as.data.frame(allsecreted)
 names(allsecreted) <- "protein_id"
 
@@ -354,13 +390,7 @@ output_file <- "/mnt/data/barry/projects/Schroeter_Pcinnamomi/PcEffector//Effect
 generate_fasta_file(allsecreted.id, output_file)
 
 detectedsecreted.id <- dplyr::right_join(pcprotein.idfaa, allsecreted, by = 'protein_id')
-```
 
-###
-EffectorP analysis
-###
-
-```{r}
 #path to where the 
 setwd("~/projects/Schroeter_Pcinnamomi/PcEffector/EffectorP_3.0.0-beta/")
 
@@ -368,21 +398,18 @@ system("/home/barry/.virtualenvs/my-python/bin/python EffectorP.py -i allsecrete
 
 ```
 
------------------
 1878 proteins were provided as input in the following file: allSP.fasta
------------------
+
 Number of predicted effectors: 741
 Number of predicted cytoplasmic effectors: 379
 Number of predicted apoplastic effectors: 362
------------------
+
 39.5 percent are predicted effectors.
 20.2 percent are predicted cytoplasmic effectors.
 19.3 percent are predicted apoplastic effectors.
------------------
+
 6.3 percent of the cytoplasmic effectors are predicted dual-localized (cytoplasmic/apoplastic).
 11.3 percent of the apoplastic effectors are predicted dual-localized (apoplastic/cytoplasmic).
------------------
------------------
 
 ```{r}
 effectorp.results <- read.delim("allSP_effectorPresults.txt", sep = "\t", stringsAsFactors = FALSE, skip = 10)
@@ -394,7 +421,85 @@ head(effectorp.results)
 
 # make this all non effectors from effectorP
 predictedeffectors <- subset(effectorp.results, Prediction != "Non-effector")
+predictedeffectors.id <- dplyr::right_join(pcprotein.idfaa, predictedeffectors, by = 'protein_id')
+```
 
+```{r}
+output_file <- "/mnt/data/barry/projects/Schroeter_Pcinnamomi/PcEffector//EffectorP_3.0.0-beta/phobtmhmmsigp.fasta"
+
+generate_fasta_file(pts, output_file)
+
+#path to where the 
+setwd("~/projects/Schroeter_Pcinnamomi/PcEffector/EffectorP_3.0.0-beta/")
+
+system("/home/barry/.virtualenvs/my-python/bin/python EffectorP.py -i phobtmhmmsigp.fasta > phobtmhmmsigpeffectorp.txt")
+```
+
+3383 proteins were provided as input in the following file: phobtmhmmsigp.fasta
+
+Number of predicted effectors: 1241
+Number of predicted cytoplasmic effectors: 845
+Number of predicted apoplastic effectors: 396
+
+36.7 percent are predicted effectors.
+25.0 percent are predicted cytoplasmic effectors.
+11.7 percent are predicted apoplastic effectors.
+
+3.9 percent of the cytoplasmic effectors are predicted dual-localized (cytoplasmic/apoplastic).
+10.6 percent of the apoplastic effectors are predicted dual-localized (apoplastic/cytoplasmic).
+
+```{r}
+ptseffectorp.results <- read.delim("EffectorP_3.0.0-beta/phobtmhmmsigpeffectorp.txt", sep = "\t", stringsAsFactors = FALSE, skip = 10)
+ptseffectorp.results <- ptseffectorp.results[1:(nrow(ptseffectorp.results) - 15), ]
+colnames(ptseffectorp.results) <- c("protein_id", "Cytoplasmic_effector", "Apoplastic_effector", "Non_effector", "Prediction")
+ptseffectorp.results$protein_id <- gsub(" ", "", ptseffectorp.results$protein_id)
+
+head(ptseffectorp.results)
+
+# make this all non effectors from effectorP
+predictedeffectors2 <- subset(ptseffectorp.results, Prediction != "Non-effector")
+predictedeffectors2.id <- dplyr::right_join(pts.id, predictedeffectors2, by = 'protein_id')
+
+#make .fasta for PHI database
+output_file <- "/mnt/data/barry/projects/Schroeter_Pcinnamomi/PcEffector/Raw_fasta/predictedeffectors.fasta"
+
+generate_fasta_file(predictedeffectors2.id, output_file)
+```
+
+###
+PHI database analysis
+###
+
+run predictedeffectors.fasta at http://phi-blast.phi-base.org/ PHI-base 4.10 protein sequences with the flag -evalue 1.0e-5
+```{r}
+
+# Set the file path to your .tsv file
+file_path <- "/mnt/data/barry/projects/Schroeter_Pcinnamomi/PcEffector/PHI-BLAST-std_tsv_report.tsv"
+
+# Read the .tsv file into a data frame, excluding rows containing "# "
+data <- read.delim(file_path, sep = "\t", header = FALSE)
+data <- data[!grepl("# ", data$V1), , drop = FALSE]
+
+# Create a new data frame to store the transformed data
+transformed_data <- data.frame(matrix(ncol = 12, nrow = nrow(data) / 12, byrow = TRUE), row.names = NULL)
+
+# Assign the values to the respective columns in the transformed data
+transformed_data$query_id <- data$V1[seq(1, nrow(data), 12)]
+transformed_data$subject_id <- data$V1[seq(2, nrow(data), 12)]
+transformed_data$percent_identity <- as.numeric(data$V1[seq(3, nrow(data), 12)])
+transformed_data$alignment_length <- as.numeric(data$V1[seq(4, nrow(data), 12)])
+transformed_data$mismatches <- as.numeric(data$V1[seq(5, nrow(data), 12)])
+transformed_data$gap_opens <- as.numeric(data$V1[seq(6, nrow(data), 12)])
+transformed_data$q_start <- as.numeric(data$V1[seq(7, nrow(data), 12)])
+transformed_data$q_end <- as.numeric(data$V1[seq(8, nrow(data), 12)])
+transformed_data$s_start <- as.numeric(data$V1[seq(9, nrow(data), 12)])
+transformed_data$s_end <- as.numeric(data$V1[seq(10, nrow(data), 12)])
+transformed_data$evalue <- data$V1[seq(11, nrow(data), 12)]
+transformed_data$bit_score <- as.numeric(data$V1[seq(12, nrow(data), 12)])
+
+transformed_data <- transformed_data[, -(1:12)]
+
+phiunique <- unique(transformed_data$query_id)
 ```
 
 ###
@@ -411,8 +516,6 @@ HMMER: dbCAN-sub (E-Value < 1e-15, coverage > 0.35)
 Jinfang Zheng and others, dbCAN3: automated carbohydrate-active enzyme and substrate annotation, 
 Nucleic Acids Research, 2023;, gkad328, https://doi.org/10.1093/nar/gkad328
 
-
-
 ```{r}
 dbcanresults <- read_tsv("dbCAN_allpcgenes.txt") 
 colnames(dbcanresults)[colnames(dbcanresults) == "Gene ID"] <- "protein_id"
@@ -426,7 +529,6 @@ dbcansecreted <- dplyr::right_join(detectedsecreted.id, dbcan, by = 'protein_id'
 dbcansecreted2 <- dbcan %>%
   filter(protein_id %in% detectedsecreted.id$protein_id)
 
-
 dbcansecreted2$Signalp <- "Y"
 
 head(dbcansecreted)
@@ -435,14 +537,27 @@ head(dbcansecreted)
 #paper predicted 468 they had HMMER/Hotpep/DIAMOND  Hotpep replaced with eCAMI obsolete version dbCAN2.0
 #227 predicted CAZymes have signal peptides
 ```
+```{r}
+effectorliterature <- as.data.frame(c(knowneffectors$protein_id, PFAM$))
+colnames(knowneffectors)[colnames(knowneffectors) == "c(nlp.df$protein_id, crn.df$protein_id, rxlr.df$protein_id)"] <- "protein_id"
+```
 
 ```{r}
 #save .RDS including predicted secreted, known/predicted effectors, and CAZymes to use in PcDESeq2.rmd
 
-#save(allsecreted.id, predictedeffectors, knowneffectors, dbcansecreted, file = "secrete.effect.RData")
+#save(allsecreted.id, predictedeffectors.id, predictedeffectors2.id, knowneffectors, dbcansecreted, file = "secrete.effect.RData")
 
 ```
 
+```{r}
+ora_res <- as.data.frame(enricher(gene = module_genes_list_early[[module.color]],
+                                    universe = bg,
+                                    maxGSSize = 5000,
+                                    TERM2GENE = genesets,
+                                    pAdjustMethod = "fdr",
+                                    pvalueCutoff = 1,
+                                    qvalueCutoff = 1))
+```
 
 ## Session information
 
