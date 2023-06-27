@@ -1,102 +1,24 @@
 
-
-
 ```{r, libs, message=FALSE}
-library(readxl)
 library("kableExtra")
 library(tidyverse)
 library(gridExtra)
 library(reshape2)
 library(dplyr)
 library(edgeR)
-library(clusterProfiler)
-library(BiocGenerics)
-library(GenomicFeatures)
-library(Biostrings)
-library(rtracklayer)
-library(data.table)
 library("eulerr")
+library(data.table)
 ```
 
-```{r}
-pc.gtf <- rtracklayer::import("https://ftp.ncbi.nlm.nih.gov/genomes/genbank/protozoa/Phytophthora_cinnamomi/latest_assembly_versions/GCA_018691715.1_ASM1869171v1/GCA_018691715.1_ASM1869171v1_genomic.gtf.gz")
-pc.df <- as.data.frame((pc.gtf))
-
-pc.genes <- filter(pc.df, type == "start_codon")
-```
-
-download .faa file https://ftp.ncbi.nlm.nih.gov/genomes/genbank/protozoa/Phytophthora_cinnamomi/latest_assembly_versions/GCA_018691715.1_ASM1869171v1/GCA_018691715.1_ASM1869171v1_protein.faa.gz
-
-```{r}
-# Read the .faa file
-faa_file <- "GCA_018691715.1_ASM1869171v1_protein.faa"  
-sequences <- readAAStringSet(faa_file, format = "fasta")
-
-formatted_sequences <- paste0(">", names(sequences), "\n", as.character(sequences), "\n")
-output_file <- "/mnt/data/barry/projects/Schroeter_Pcinnamomi/PcEffector/Pcgenes.fasta" 
-writeLines(formatted_sequences, output_file)
-
-Pcgenenames <- read.table('pcgeneids.tsv', row.names = 1, quote = "", sep='\t', fill = TRUE, header = TRUE)
-
-load("Pceffetor.RData")
-
-# first rearrange cols
-allgenes <- detectedgenes
-allgenes$gene_id<-rownames(allgenes)
-rownames(allgenes)<-seq(nrow(allgenes))
-head(allgenes)
-
-Pcgenenames <- read.table('pcgeneids.tsv', row.names = 1, quote = "", sep='\t', fill = TRUE, header = TRUE)
-
-pcprotein.id <- dplyr::right_join(Pcgenenames, allgenes, by = 'gene_id')
-
-# Define a list of protein IDs to extract
-protein_list <- pcprotein.id$protein_id
+```{r, include=FALSE}
+source("../shared_scripts/pcinnamomi_annotations.R", 
+       local = knitr::knit_global())
+source("../shared_scripts/sample_names.R", 
+       local = knitr::knit_global())
+source("../shared_scripts/countmatrix.R", 
+       local = knitr::knit_global())
 
 ```
-
-```{r}
-# Read the .faa file
-#faa_file <- "GCA_018691715.1_ASM1869171v1_protein.faa"  
-#sequences <- readAAStringSet(faa_file)
-
-# Extract headers and sequences
-headers <- names(sequences)
-sequence_strings <- as.character(sequences)
-
-# Extract protein identifiers from headers
-protein_identifiers <- sub("^>(\\S+).*", "\\1", headers)
-
-# Create a data frame with protein identifiers and sequences
-df <- data.frame(protein_id = protein_identifiers, Sequence = sequence_strings, stringsAsFactors = FALSE)
-
-# Filter the "ProteinID" column to include only the first 12 characters
-df$protein_id <- substr(df$protein_id, 1, 12)
-
-gtf.faa <- dplyr::right_join(df, pc.genes, by = 'protein_id') 
-gtf.faa <- gtf.faa[, c(1,2,12, 19)]
-
-# Print the updated data frame
-head(df)
-uniqueprot <- unique(df[df$protein_id,])
-pcprotein.idfaa <- dplyr::right_join(df, pcprotein.id, by = 'protein_id')
-pcprotein.idfaa <- pcprotein.idfaa[, 1:4]
-head(pcprotein.idfaa)
-```
-
-Load GO terms blasted from Omicsbox 
-```{r}
-goterms <- read.delim('pc.goterms.txt', header = TRUE) %>%
-   dplyr::select(c(SeqName, GO.IDs, GO.Names, Description))
-  
-colnames(goterms) <- c("protein_id", "GO_terms", "GO_descripton", "description")
-
-gtf.faa.omicsbox <- dplyr::right_join(gtf.faa, goterms, by = 'protein_id')
-
-head(gtf.faa.omicsbox)
-```
-
-function used to create .fasta for inputs
 
 ```{r}
 #function used to make .fasta files for analysis
@@ -108,22 +30,6 @@ write_fasta <- function(df, file_path) {
 generate_fasta_file <- function(df, output_file) {
   write_fasta(df, output_file)
 }
-```
-
-```{r}
-testfasta <- head(pcprotein.idfaa)
-output_file <- "/mnt/data/barry/projects/Schroeter_Pcinnamomi/PcEffector/Raw_fasta/test.fasta"
-
-generate_fasta_file(testfasta, output_file)
-#use for testing terminal scripts (InterProScan, SignalP and EffectorP) - 6 genes
-```
-
-```{r}
-#Pc genes detect in transcriptome -- 13595 genes detected 
-output_file <- "/mnt/data/barry/projects/Schroeter_Pcinnamomi/PcEffector/Raw_fasta/detected_genes.fasta"
-
-generate_fasta_file(pcprotein.idfaa, output_file)
-
 ```
 
 ```{r}
@@ -156,16 +62,8 @@ Matches for any sequences that are not represented in the lookup service will be
 05/06/2023 16:12:19:464 100% done:  InterProScan analyses completed 
 
 ```{r}
-interproscanresults <- read_tsv("allpcgenes.fasta.tsv")
-
-colnames(interproscanresults) <- c("protein_id", "protein_md5", "protein_length", 
-                     "analysis", "signature_id", 
-                     "signature_desc", "start", "end", 
-                     "score", "status", "date", 
-                     "interpro_id", "interpro_desc", "go_terms")
-head(interproscanresults)
-
-uniqueips <- distinct(interproscanresults, protein_id)
+source("../shared_scripts/effectors_from_literature.R", 
+       local = knitr::knit_global())
 
 ```
 
@@ -175,7 +73,7 @@ interproscanSP <- interproscanresults[interproscanresults$signature_id == "SIGNA
 interproscanSP <- unique(interproscanSP$protein_id)
 
 phobius.id <- gtf.faa.omicsbox[gtf.faa.omicsbox$protein_id %in% interproscanSP, ]
-#Phobius predicts 3050 proteins with predicted signal peptides from 16957 proteins scanned - less than 80 amino acids not scanned by interProScan introduces ribosomal proteins - look at removing them based on er retention signals? further work
+#Phobius predicts 3050 proteins with predicted signal peptides from 16957 proteins scanned - less than 80 amino acids not scanned by interProScan introduces ribosomal proteins - look at removing them based on er retention signals? further work. Although may be a nuclear signal that is seen in plants that target from chloroplast to nucleus
 
 #3050 proteins
 ```
@@ -240,7 +138,7 @@ signalPSP <- split_results %>%
 head(signalPSP)
 
 split_results$probability <- as.numeric(signalPSP$probability)
-hist(split_results$probability, main = "Probability Histogram", xlab = "Probability")
+hist(split_results$probability, main = "Signal peptide probability", xlab = "Probability")
 
 #filter out low probability SP
 signalPSP.filtered <- subset(signalPSP, probability >= 0.7)
@@ -269,115 +167,6 @@ pts.id <- gtf.faa.omicsbox[gtf.faa.omicsbox$protein_id %in% phobius.tmhmm.signal
 #3373 predicted secreted proteins using EffectorP3.0 suggestion
 ```
 
-###############################
- Effectors from the literature 
-###############################
-
-```{r}
-#PFAM accessions associated with pathogenicity
-
-#elicitin Pfam domain PF00964
-PF00964 <- unique(interproscanresults[interproscanresults$signature_id == "PF00964",])
-#serine protease inhibitor Kazal-like domain PF07648
-PF07648 <- unique(interproscanresults[interproscanresults$signature_id == "PF07648",])
-#chymotrypsin PF00089 
-PF00089 <- unique(interproscanresults[interproscanresults$signature_id == "PF00089",])
-#PAN/Apple domain PF14295 
-PF14295 <- unique(interproscanresults[interproscanresults$signature_id == "PF14295",])
-#Cathepsin propeptide inhibitor PF08246
-PF08246 <- unique(interproscanresults[interproscanresults$signature_id == "PF08246",])
-# Lytic polysaccharide mono-oxygenase PF03067
-PF03067 <- unique(interproscanresults[interproscanresults$signature_id == "PF03067",])
-#Transglutaminase_elicitor PF16683 
-PF16683 <- unique(interproscanresults[interproscanresults$signature_id == "PF16683",])
-#Cysteine_rich_secretory_protein_family PF00188 
-PF00188 <- unique(interproscanresults[interproscanresults$signature_id == "PF00188",])
-#Glycosyl_hydrolase_family_12 PF01670
-PF01670 <- unique(interproscanresults[interproscanresults$signature_id == "PF01670",])
-#pectin degradation (PF03283, PF00544, and PF03211)
-PF03283 <- unique(interproscanresults[interproscanresults$signature_id == "PF03283",])
-PF00544 <- unique(interproscanresults[interproscanresults$signature_id == "PF00544",])
-PF03211 <- unique(interproscanresults[interproscanresults$signature_id == "PF03211",])
-
-pfameffectors <- as.data.frame(unique(c(PF00964$protein_id, PF07648$protein_id, PF00089$protein_id, PF14295$protein_id, PF08246$protein_id, PF03067$protein_id, PF16683$protein_id, PF00188$protein_id, PF01670$protein_id, PF03283$protein_id, PF00544$protein_id, PF03211$protein_id)))
-
-names(pfameffectors)[1] <- "protein_id"
-
-pfameffectors.id <- dplyr::right_join(gtf.faa.omicsbox, pfameffectors, by = 'protein_id')
-#177 proteins from PFAM domains known to be involved in pathogenicity
-```
-
-Get supplementary files from https://rdcu.be/dcczO
-https://static-content.springer.com/esm/art%3A10.1186%2Fs12864-021-07552-y/MediaObjects/12864_2021_7552_MOESM2_ESM.xls
-
-```{r, Engelbrecht supp rxlr}
-#only considered the 181 candidate RxLR -IUM83_06578-RA/RB alternatively spliced total 180 rxlr
-pcrxlr <- read_xls('12864_2021_7552_MOESM2_ESM.xls', 
-                   sheet = 'TableS2',
-                   col_names = F,
-                   range = 'A3:A183') 
-colnames(pcrxlr) <- c("gene_id")
-
-# Remove the last three characters of each row
-pcrxlr$gene_id <- substr(pcrxlr$gene_id, 1, nchar(pcrxlr$gene_id) - 3)
-
-as.data.frame(pcrxlr)
-
-rxlr.df <- Pcgenenames %>%
-  filter(gene_id %in% pcrxlr$gene_id)
-
-head(rxlr.df)
-
-```
-
-```{r, Engelbrecht supp crn}
-#49 CRNs (45 genes, of which four have alternative transcript variants)
-pccrn <- read_xls('12864_2021_7552_MOESM2_ESM.xls', 
-                   sheet = 'TableS3',
-                   col_names = F,
-                   range = 'A3:A51') 
-# Rename the column
-colnames(pccrn) <- c("gene_id")
-
-# Remove the last three characters of each row
-pccrn$gene_id <- substr(pccrn$gene_id, 1, nchar(pccrn$gene_id) - 3)
-
-as.data.frame(pccrn)
-
-crn.df <- Pcgenenames %>%
-  filter(gene_id %in% pccrn$gene_id)
-
-head(crn.df)
-```
-
-```{r, Engelbrecht supp nlp}
-#61 necrosis-inducing proteins (NLPs)
-pcnlp <- read_xls('12864_2021_7552_MOESM2_ESM.xls', 
-                   sheet = 'TableS4',
-                   col_names = F,
-                   range = 'A3:A63') 
-# Rename the column
-colnames(pcnlp) <- c("gene_id")
-
-# Remove the last three characters of each row
-pcnlp$gene_id <- substr(pcnlp$gene_id, 1, nchar(pcnlp$gene_id) - 3)
-
-as.data.frame(pcnlp)
-
-nlp.df <- Pcgenenames %>%
-  filter(gene_id %in% pcnlp$gene_id)
-
-head(nlp.df)
-```
-
-```{r}
-#list of know effectors based on published data 
-knowneffectors <- unique(c(nlp.df$protein_id, crn.df$protein_id, rxlr.df$protein_id))
-
-knowneffectors.id <- gtf.faa.omicsbox[gtf.faa.omicsbox$protein_id %in% knowneffectors, ]
-#286 proteins
-```
-
 ################
  bdCAN analysis
 ################
@@ -393,7 +182,8 @@ Jinfang Zheng and others, dbCAN3: automated carbohydrate-active enzyme and subst
 Nucleic Acids Research, 2023;, gkad328, https://doi.org/10.1093/nar/gkad328
 
 ```{r}
-dbcanresults <- read_tsv("dbCAN_allpcgenes.txt") 
+dbcanresults <- read_tsv("dbCAN_allpcgenes.txt", show_col_types = FALSE) 
+
 colnames(dbcanresults)[colnames(dbcanresults) == "Gene ID"] <- "protein_id"
 
 dbcan <- dbcanresults %>%
@@ -413,29 +203,30 @@ dbcansecreted.id <- gtf.faa.omicsbox[gtf.faa.omicsbox$protein_id %in% dbcansecre
 totalsecreted <- unique(c(pts.id$protein_id, pfameffectors.id$protein_id, knowneffectors.id$protein_id, signalPSP.filtered.id$protein_id, dbcan.id$protein_id, phobius.id$protein_id, filtered_interproscanTMHMM.id$protein_id))
 
 totalsecreted.id <- gtf.faa.omicsbox[gtf.faa.omicsbox$protein_id %in% totalsecreted, ]
+```
 
-inplantadetected <- unique(pcprotein.idfaa$protein_id)
+```{r}
+source("../shared_scripts/detected_pcgenes.R", 
+       local = knitr::knit_global())
 
+detectedgenes <- as.data.frame(rownames(assay(dds)))
+colnames(detectedgenes) <- "gene_id"
+detectedgenes.id <- dplyr::right_join(gtf.faa.omicsbox, detectedgenes, by = 'gene_id')
+
+inplantadetected <- unique(detectedgenes.id$protein_id)
 inplantasecreted.id <- totalsecreted.id[totalsecreted.id$protein_id %in% inplantadetected, ]
-
 ```
 
 ```{r, secretome eulerr plot}
 
 s1 <- unique(pfameffectors.id$protein_id)
 s2 <- unique(knowneffectors.id$protein_id)
-s3 <- unique(pts.id$protein_id)
-s4 <- unique(signalPSP.filtered.id$protein_id)
-s5 <- unique(dbcan.id$protein_id)
-
-s7 <- unique(phobius.id$protein_id)
-s8 <- unique(filtered_interproscanTMHMM.id$protein_id)
-s9 <- unique(totalsecreted.id$protein_id)
-s10 <- unique(inplantasecreted.id$protein_id)
+s3 <- unique(signalPSP.filtered.id$protein_id)
+s4 <- unique(dbcan.id$protein_id)
+s6 <- unique(phobius.id$protein_id)
+s7 <- unique(filtered_interproscanTMHMM.id$protein_id)
 
 filename <- "predictedsecretome.png"
-
-# Create a PNG device
 png(filename)
 
 width <- 10  
@@ -443,9 +234,9 @@ height <- 6
 
 png(filename, width = width, height = height, units = "in", res = 300)
 
-SECRETOME <- list("Pfam"=s1, "Genome"=s2, "CAZyme"=s5,"Phobius"=s7, "TMHMM"=s8, "SignalP"=s4)
+SECRETOME <- list("Pfam"=s1, "Genome"=s2, "SignalP"=s3, "CAZyme"=s4,"Phobius"=s6, "TMHMM"=s7)
 
-plot(euler(SECRETOME),quantities = TRUE, labels = list(font = 24), main="Predicted secterome")
+plot(euler(SECRETOME),quantities = TRUE, labels = list(font = 24), main="Predicted secretome")
 
 dev.off()
 ```
@@ -455,7 +246,7 @@ dev.off()
 #####################
 
 ```{r}
-output_file <- "/mnt/data/barry/projects/Schroeter_Pcinnamomi/PcEffector//EffectorP_3.0.0-beta/totalsecreted.fasta"
+output_file <- "../PcEffector//EffectorP_3.0.0-beta/totalsecreted.fasta"
 
 generate_fasta_file(totalsecreted.id, output_file)
 
@@ -493,7 +284,7 @@ predictedtotaleffectors.id <- dplyr::right_join(gtf.faa.omicsbox, predictedtotal
 ```
 
 ```{r}
-output_file <- "/mnt/data/barry/projects/Schroeter_Pcinnamomi/PcEffector//EffectorP_3.0.0-beta/inplantasecreted.fasta"
+output_file <- "../PcEffector//EffectorP_3.0.0-beta/inplantasecreted.fasta"
 
 generate_fasta_file(inplantasecreted.id, output_file)
 
@@ -503,19 +294,18 @@ setwd("~/projects/Schroeter_Pcinnamomi/PcEffector/EffectorP_3.0.0-beta/")
 system("/home/barry/.virtualenvs/my-python/bin/python EffectorP.py -i inplantasecreted.fasta > inplantasecreted_effectorPresults.txt")
 
 ```
-
-2491 proteins were provided as input in the following file: inplantasecreted.fasta
+2607 proteins were provided as input in the following file: inplantasecreted.fasta
 -----------------
-Number of predicted effectors: 792
-Number of predicted cytoplasmic effectors: 567
-Number of predicted apoplastic effectors: 225
+Number of predicted effectors: 824
+Number of predicted cytoplasmic effectors: 582
+Number of predicted apoplastic effectors: 242
 -----------------
-31.8 percent are predicted effectors.
-22.8 percent are predicted cytoplasmic effectors.
-9.0 percent are predicted apoplastic effectors.
+31.6 percent are predicted effectors.
+22.3 percent are predicted cytoplasmic effectors.
+9.3 percent are predicted apoplastic effectors.
 -----------------
-3.4 percent of the cytoplasmic effectors are predicted dual-localized (cytoplasmic/apoplastic).
-12.9 percent of the apoplastic effectors are predicted dual-localized (apoplastic/cytoplasmic).
+3.6 percent of the cytoplasmic effectors are predicted dual-localized (cytoplasmic/apoplastic).
+12.0 percent of the apoplastic effectors are predicted dual-localized (apoplastic/cytoplasmic).
 
 ```{r}
 effectorpinplanta.results <- read.delim("EffectorP_3.0.0-beta/inplantasecreted_effectorPresults.txt", sep = "\t", stringsAsFactors = FALSE, skip = 10)
@@ -526,18 +316,20 @@ effectorpinplanta.results$protein_id <- gsub(" ", "", effectorpinplanta.results$
 head(effectorpinplanta.results)
 inplantasecreted <- effectorpinplanta.results
 inplantasecreted.id <- dplyr::right_join(gtf.faa.omicsbox, inplantasecreted, by = 'protein_id')
-# 2491 secreted proteins in planta
+# 2607 secreted proteins in planta
 
 inplantanoneffector <- subset(inplantasecreted, inplantasecreted$Prediction == "Non-effector")
 inplantanoneffector.id <- dplyr::right_join(gtf.faa.omicsbox, inplantanoneffector, by = 'protein_id')
-# 1699 predicted non-effectors
+# 1783 predicted non-effectors
 
 inplantaeffectors <- subset(inplantasecreted, inplantasecreted$Prediction != "Non-effector")
 inplantaeffectors.id <- dplyr::right_join(gtf.faa.omicsbox, inplantaeffectors, by = 'protein_id')
-# 792 effector genes in planta
+# 824 effector genes in planta
 ```
 
 ```{r, effector expression}
+#load("Pcdeseq2.RData")
+
 earlydetected <- as.data.frame(res_early_vs_vegetative)
 earlydetected$gene_id <- rownames(earlydetected)
 earlysecreted <- dplyr::right_join(earlydetected, inplantasecreted.id, by = 'gene_id')
@@ -554,22 +346,22 @@ latesecreted <- dplyr::right_join(latedetected, inplantasecreted.id, by = 'gene_
 
 ```{r, effector eulerr plot}
 
-eeup <- unique(earlysecreted[earlysecreted$log2FoldChange > 0 & earlysecreted$padj < 0.05, ])
-eeup <- eeup$gene_id
-eedn <- unique(earlysecreted[earlysecreted$log2FoldChange < 0 & earlysecreted$padj < 0.05, ])
-eedn <- eedn$gene_id
+eeup <- earlysecreted[earlysecreted$log2FoldChange > 0 & earlysecreted$padj < 0.05, ]
+eeup <- unique(eeup$gene_id)
+eedn <- earlysecreted[earlysecreted$log2FoldChange < 0 & earlysecreted$padj < 0.05, ]
+eedn <- unique(eedn$gene_id)
 
-meup <- unique(midsecreted[midsecreted$log2FoldChange > 0 & midsecreted$padj < 0.05, ])
-meup <- meup$gene_id
-medn <- unique(midsecreted[midsecreted$log2FoldChange < 0 & midsecreted$padj < 0.05, ])
-medn <- medn$gene_id
+meup <- midsecreted[midsecreted$log2FoldChange > 0 & midsecreted$padj < 0.05, ]
+meup <- unique(meup$gene_id)
+medn <- midsecreted[midsecreted$log2FoldChange < 0 & midsecreted$padj < 0.05, ]
+medn <- unique(medn$gene_id)
 
-leup <- unique(latesecreted[latesecreted$log2FoldChange > 0 & latesecreted$padj < 0.05, ])
-leup <- leup$gene_id
-ledn <- unique(latesecreted[latesecreted$log2FoldChange < 0 & latesecreted$padj < 0.05, ])
-ledn <- ledn$gene_id
+leup <- latesecreted[latesecreted$log2FoldChange > 0 & latesecreted$padj < 0.05, ]
+leup <- unique(leup$gene_id)
+ledn <- latesecreted[latesecreted$log2FoldChange < 0 & latesecreted$padj < 0.05, ]
+ledn <- unique(ledn$gene_id)
 
-filename <- "predictedeffectorexpression.png"
+filename <- "Effectorexpression.png"
 
 # Create a PNG device
 png(filename)
@@ -579,18 +371,16 @@ height <- 6
 
 png(filename, width = width, height = height, units = "in", res = 300)
 
-v1 <- list("Earlyup"=eeup, "Earlydn"=eedn, "Midup"=meup, "Middn"=medn, "Lateup"=leup,"Latedn"=ledn)
+secreted <- list("Earlyup"=eeup, "Earlydn"=eedn, "Midup"=meup, "Middn"=medn, "Lateup"=leup,"Latedn"=ledn)
 
-#plot(euler(v1),labels = list(cex=2),quantities = list(cex=2), shape = "ellipse", main="Predicted effector expression")
-plot(euler(v1),quantities = TRUE, labels = list(font = 24), main="Predicted effector expression")
+plot(euler(secreted),quantities = TRUE, labels = list(font = 24), main="In Planta secretome expression")
 
 dev.off()
 ```
 
-
 ```{r, effector ORA}
 
-bg <- allgenes$gene_id
+bg <- detectedgenes.id$gene_id
 bg.set <- data.frame("background", bg)
 colnames(bg.set) <- c("term", "gene")
 
@@ -600,11 +390,11 @@ colnames(all.set) <- c("term", "gene")
 Noneffector.set <- data.frame("Non_effector", inplantanoneffector.id$gene_id)
 colnames(Noneffector.set) <- c("term", "gene")
 
-apop <- predictedinplantaeffectors.id[grep("Y", inplantasecreted.id$Apoplastic_effector),]
+apop <- inplantasecreted.id[grep("Y", inplantasecreted.id$Apoplastic_effector),]
 apop.set <- data.frame("Apoplastic", apop$gene_id)
 colnames(apop.set) <- c("term", "gene")
 
-cyto <- predictedinplantaeffectors.id[grep("Y", inplantasecreted.id$Cytoplasmic_effector),]
+cyto <- inplantasecreted.id[grep("Y", inplantasecreted.id$Cytoplasmic_effector),]
 cyto.set <- data.frame("Cytosolic", cyto$gene_id) 
 colnames(cyto.set) <- c("term", "gene")
 
@@ -613,6 +403,8 @@ sets <- rbind(bg.set, all.set, Noneffector.set, apop.set, cyto.set)
 ```
 
 ```{r}
+library(clusterProfiler)
+
 ora_res <- as.data.frame(enricher(gene = leup,
                                     universe = bg,
                                     maxGSSize = 50000,
@@ -642,9 +434,6 @@ leESraw <- ora_res
 ```
 
 ```{r}
-# Load required libraries
-library(ggplot2)
-
 # Create a data frame for eeES, meES, and leES
 eeES <- data.frame(
   Dataset = "eeES",
@@ -667,156 +456,149 @@ leES <- data.frame(
 # Combine the datasets
 combined_data <- rbind(eeES, meES, leES)
 
-# Define the order of the datasets
+# Define the order and labels for the x-axis
 dataset_order <- c("eeES", "meES", "leES")
+x_labels <- c("Early", "Middle", "Late")
 
-# Convert the "Dataset" column to a factor with the desired order
-combined_data$Dataset <- factor(combined_data$Dataset, levels = dataset_order)
+# Convert the "Dataset" column to a factor with the desired order and labels
+combined_data$Dataset <- factor(combined_data$Dataset, levels = dataset_order, labels = x_labels)
+
 # Set the filename for the PNG file
-
-filename <- "cytoplastic-apoplastic_effector.png"
+filename <- "cytoplasmic-apoplastic_effector1.png"
 
 # Create a PNG device
 png(filename)
+
 # Create the line plot
 ggplot(combined_data, aes(x = Dataset, y = ES, color = GeneSet, group = GeneSet)) +
   geom_line() +
   geom_point() +
-  labs(x = "Dataset", y = "Enrichment Score (ES)",
+  labs(x = "Time Point", y = "Enrichment Score (ES)",
        title = "Over-representation analysis of predicted secreted genes") +
-  scale_color_manual(values = c("Cytosolic" = "blue", "Apoplastic" = "red", "Non-effector" = "black")) +
+  scale_color_manual(values = c("Cytosolic" = "blue", "Apoplastic" = "red", "Non_effector" = "black")) +
   theme_minimal()
+
 dev.off()
 ```
-
-
-
-
-
-
 ```{r}
-allsecreted.id <- dplyr::right_join(df, allsecreted, by = 'protein_id')
+genesets <- read.gmt("goterms.gmt")
+bg <- detectedgenes.id$gene_id
 
-output_file <- "/mnt/data/barry/projects/Schroeter_Pcinnamomi/PcEffector//EffectorP_3.0.0-beta/allsecreted.fasta"
+ora_res <- as.data.frame(enricher(gene = eeup,
+                                    universe = bg,
+                                    maxGSSize = 50000,
+                                    TERM2GENE = genesets,
+                                    pAdjustMethod = "fdr",
+                                    pvalueCutoff = 1,
+                                    qvalueCutoff = 1))
 
-generate_fasta_file(allsecreted.id, output_file)
+ora_res$geneID <- NULL
+  ora_res_names <- rownames(ora_res)
+  
+  ora_res$GeneRatio <- as.character(ora_res$GeneRatio)
+  
+  gr <- as.numeric(sapply(strsplit(as.character(ora_res$GeneRatio), "/"), "[[", 1)) /
+    as.numeric(sapply(strsplit(as.character(ora_res$GeneRatio), "/"), "[[", 2))
+  
+  br <- as.numeric(sapply(strsplit(as.character(ora_res$BgRatio), "/"), "[[", 1)) /
+    as.numeric(sapply(strsplit(as.character(ora_res$BgRatio), "/"), "[[", 2))
+  
+  ora_res$es <- gr/br
+  ora_res <- ora_res[order(-ora_res$es), ]
+  ora_res$Description <- NULL
+  
+view(ora_res)  
 
-detectedsecreted.id <- dplyr::right_join(gtf.faa, allsecreted, by = 'protein_id')
-```
-
-1878 proteins were provided as input in the following file: allSP.fasta
-
-Number of predicted effectors: 741
-Number of predicted cytoplasmic effectors: 379
-Number of predicted apoplastic effectors: 362
-
-39.5 percent are predicted effectors.
-20.2 percent are predicted cytoplasmic effectors.
-19.3 percent are predicted apoplastic effectors.
-
-6.3 percent of the cytoplasmic effectors are predicted dual-localized (cytoplasmic/apoplastic).
-11.3 percent of the apoplastic effectors are predicted dual-localized (apoplastic/cytoplasmic).
-
-```{r}
-effectorp.results <- read.delim("allSP_effectorPresults.txt", sep = "\t", stringsAsFactors = FALSE, skip = 10)
-effectorp.results <- effectorp.results[1:(nrow(effectorp.results) - 15), ]
-colnames(effectorp.results) <- c("protein_id", "Cytoplasmic_effector", "Apoplastic_effector", "Non_effector", "Prediction")
-effectorp.results$protein_id <- gsub(" ", "", effectorp.results$protein_id)
-
-head(effectorp.results)
-
-# make this all non effectors from effectorP
-predictedeffectors <- subset(effectorp.results, Prediction != "Non-effector")
-predictedeffectors.id <- dplyr::right_join(gtf.faa, predictedeffectors, by = 'protein_id')
+eeESgo <- ora_res
 ```
 
 ```{r}
-output_file <- "/mnt/data/barry/projects/Schroeter_Pcinnamomi/PcEffector//EffectorP_3.0.0-beta/phobtmhmmsigp.fasta"
+library(ggplot2)
 
-generate_fasta_file(pts, output_file)
+esig <- subset(earlysecreted, padj < 0.05)
+enonsig <- subset(earlysecreted, padj > 0.05)
+msig <- subset(midsecreted, padj < 0.05)
+mnonsig <- subset(midsecreted, padj > 0.05)
+lsig <- subset(latesecreted, padj < 0.05)
+lnonsig <- subset(latesecreted, padj > 0.05)
 
-#path to where the 
-setwd("~/projects/Schroeter_Pcinnamomi/PcEffector/EffectorP_3.0.0-beta/")
 
-system("/home/barry/.virtualenvs/my-python/bin/python EffectorP.py -i phobtmhmmsigp.fasta > phobtmhmmsigpeffectorp.txt")
+plot(log10(res_early_vs_vegetative$baseMean), res_early_vs_vegetative$log2FoldChange,
+     xlab = "log10 basemean", ylab = "log2 foldchange",
+     pch = 19, cex = 0.5, col = "dark gray",
+     main = "Early effectors")
+points(log10(esig$baseMean), esig$log2FoldChange,
+       pch = 19, cex = 0.5, col = "blue")
+points(log10(enonsig$baseMean), enonsig$log2FoldChange,
+       pch = 19, cex = 0.5, col = "red")
+
+
+plot(log10(res_middle_vs_vegetative$baseMean), res_middle_vs_vegetative$log2FoldChange,
+     xlab = "log10 basemean", ylab = "log2 foldchange",
+     pch = 19, cex = 0.5, col = "dark gray",
+     main = "Mid effectors")
+points(log10(msig$baseMean), msig$log2FoldChange,
+       pch = 19, cex = 0.5, col = "blue")
+points(log10(mnonsig$baseMean), mnonsig$log2FoldChange,
+       pch = 19, cex = 0.5, col = "red")
+
+
+plot(log10(res_late_vs_vegetative$baseMean), res_late_vs_vegetative$log2FoldChange,
+     xlab = "log10 basemean", ylab = "log2 foldchange",
+     pch = 19, cex = 0.5, col = "dark gray",
+     main = "Late effectors")
+points(log10(lsig$baseMean), lsig$log2FoldChange,
+       pch = 19, cex = 0.5, col = "blue")
+points(log10(lnonsig$baseMean), lnonsig$log2FoldChange,
+       pch = 19, cex = 0.5, col = "red")
+
 ```
-
-3383 proteins were provided as input in the following file: phobtmhmmsigp.fasta
-
-Number of predicted effectors: 1241
-Number of predicted cytoplasmic effectors: 845
-Number of predicted apoplastic effectors: 396
-
-36.7 percent are predicted effectors.
-25.0 percent are predicted cytoplasmic effectors.
-11.7 percent are predicted apoplastic effectors.
-
-3.9 percent of the cytoplasmic effectors are predicted dual-localized (cytoplasmic/apoplastic).
-10.6 percent of the apoplastic effectors are predicted dual-localized (apoplastic/cytoplasmic).
 
 ```{r}
-ptseffectorp.results <- read.delim("EffectorP_3.0.0-beta/phobtmhmmsigpeffectorp.txt", sep = "\t", stringsAsFactors = FALSE, skip = 10)
-ptseffectorp.results <- ptseffectorp.results[1:(nrow(ptseffectorp.results) - 15), ]
-colnames(ptseffectorp.results) <- c("protein_id", "Cytoplasmic_effector", "Apoplastic_effector", "Non_effector", "Prediction")
-ptseffectorp.results$protein_id <- gsub(" ", "", ptseffectorp.results$protein_id)
+library(ggplot2)
 
-head(ptseffectorp.results)
+# Extract columns from DESeqResults object
+res_df <- data.frame(
+  baseMean = res_early_vs_vegetative$baseMean,
+  log2FoldChange = res_early_vs_vegetative$log2FoldChange
+)
 
-# make this all non effectors from effectorP
-predictedeffectors2 <- subset(ptseffectorp.results, Prediction != "Non-effector")
-predictedeffectors2.id <- dplyr::right_join(gtf.faa, predictedeffectors2, by = 'protein_id')
+# Create the smear plot
+ggplot(res_df, aes(x = log10(baseMean), y = log2FoldChange)) +
+  geom_point(color = "darkgray", alpha = 0.5) +
+  xlab("log10 basemean") +
+  ylab("log2 foldchange") +
+  ggtitle("Smear Plot") +
+  
+  # Add significant points in blue
+  geom_point(data = esig, aes(x = log10(baseMean), y = log2FoldChange),
+             color = "blue", alpha = 0.5) +
+  
+  # Add non-significant points in red
+  geom_point(data = enonsig, aes(x = log10(baseMean), y = log2FoldChange),
+             color = "red", alpha = 0.5)
 
-#make .fasta for PHI database
-output_file <- "/mnt/data/barry/projects/Schroeter_Pcinnamomi/PcEffector/Raw_fasta/predictedeffectors.fasta"
-
-generate_fasta_file(predictedeffectors2.id, output_file)
 ```
+
+
+smear plot that shows the effectors. x=log10 base mean, y=log2 fold change. It will indicate which effectors have the largest overall expression and fold change. You can label the significant effectors red, the non significant effectors blue and all other genes grey in the background.  For the significant effectors with the largest basemean expression, you can add a gene label. You can focus on those ones in your discussion perhaps.
 
 ```{r}
-#save .RDS including predicted secreted, known/predicted effectors, and CAZymes to use in PcDESeq2.rmd
+library(plotly)
 
-#save(allsecreted.id, predictedeffectors.id, predictedeffectors2.id, knowneffectors.id, dbcan.id, file = "secrete.effect.RData")
+# Convert DESeqResults object to a data frame
+res_df <- as.data.frame(res_early_vs_vegetative)
 
+# Create the interactive smear plot
+plot_ly(res_df, x = ~log10(baseMean), y = ~log2FoldChange, color = I("darkgray"),
+        type = "scatter", mode = "markers", marker = list(opacity = 0.5)) %>%
+  add_markers(data = esig, color = I("blue"), hovertext = ~gene_id, hoverinfo = "text") %>%
+  add_markers(data = enonsig, color = I("red"), hovertext = ~gene_id, hoverinfo = "text") %>%
+  layout(xaxis = list(title = "log10 basemean"),
+         yaxis = list(title = "log2 foldchange"),
+         title = "Smear Plot")
 ```
 
-########################
- PHI database analysis
-########################
-
-run predictedeffectors.fasta at http://phi-blast.phi-base.org/ PHI-base 4.10 protein sequences with the flag -evalue 1.0e-5
-```{r}
-
-# Set the file path to your .tsv file
-file_path <- "/mnt/data/barry/projects/Schroeter_Pcinnamomi/PcEffector/PHI-BLAST-std_tsv_report.tsv"
-
-# Read the .tsv file into a data frame, excluding rows containing "# "
-data <- read.delim(file_path, sep = "\t", header = FALSE)
-data <- data[!grepl("# ", data$V1), , drop = FALSE]
-
-# Create a new data frame to store the transformed data
-transformed_data <- data.frame(matrix(ncol = 12, nrow = nrow(data) / 12, byrow = TRUE), row.names = NULL)
-
-# Assign the values to the respective columns in the transformed data
-transformed_data$protein_id <- data$V1[seq(1, nrow(data), 12)]
-transformed_data$subject_id <- data$V1[seq(2, nrow(data), 12)]
-transformed_data$percent_identity <- as.numeric(data$V1[seq(3, nrow(data), 12)])
-transformed_data$alignment_length <- as.numeric(data$V1[seq(4, nrow(data), 12)])
-transformed_data$mismatches <- as.numeric(data$V1[seq(5, nrow(data), 12)])
-transformed_data$gap_opens <- as.numeric(data$V1[seq(6, nrow(data), 12)])
-transformed_data$q_start <- as.numeric(data$V1[seq(7, nrow(data), 12)])
-transformed_data$q_end <- as.numeric(data$V1[seq(8, nrow(data), 12)])
-transformed_data$s_start <- as.numeric(data$V1[seq(9, nrow(data), 12)])
-transformed_data$s_end <- as.numeric(data$V1[seq(10, nrow(data), 12)])
-transformed_data$evalue <- data$V1[seq(11, nrow(data), 12)]
-transformed_data$bit_score <- as.numeric(data$V1[seq(12, nrow(data), 12)])
-
-transformed_data <- transformed_data[, -(1:12)]
-transformed_data.id <- dplyr::right_join(gtf.faa, transformed_data, by = 'protein_id')
-phiunique <- as.data.frame(unique(transformed_data$protein_id)) 
-names(phiunique)[1] <- "protein_id"
-
-phiunique.id <- dplyr::right_join(gtf.faa, phiunique, by = 'protein_id')
-```
 
 
 ## Session information
