@@ -1,16 +1,20 @@
 
 ```{r, libs, message=FALSE}
-library("kableExtra")
+
 library(tidyverse)
 library(gridExtra)
 library(reshape2)
 library(dplyr)
 library(edgeR)
-library("eulerr")
 library(data.table)
+library(clusterProfiler)
+library(ggplot2)
+library("kableExtra")
+library("eulerr")
 ```
 
 ```{r, include=FALSE}
+#import raw files
 source("../shared_scripts/pcinnamomi_annotations.R", 
        local = knitr::knit_global())
 source("../shared_scripts/sample_names.R", 
@@ -30,10 +34,8 @@ write_fasta <- function(df, file_path) {
 generate_fasta_file <- function(df, output_file) {
   write_fasta(df, output_file)
 }
-```
 
-```{r}
-#all Pc genes from .faa file -- 21334 genes 
+#all Pc proteins from .faa file -- 21334 genes 
 output_file <- "/mnt/data/barry/projects/Schroeter_Pcinnamomi/PcEffector/Raw_fasta/allpcgenes.fasta"
 
 generate_fasta_file(df, output_file)
@@ -61,7 +63,9 @@ Matches for any sequences that are not represented in the lookup service will be
 05/06/2023 15:59:51:007 77% completed
 05/06/2023 16:12:19:464 100% done:  InterProScan analyses completed 
 
-```{r}
+```{r, warning=FALSE}
+# RxLR, CRN and NLP predicted from Engelbrecht, Juanita, et al. "Genome of the destructive oomycete Phytophthora cinnamomi provides insights into its pathogenicity and adaptive potential." BMC genomics 22.1 (2021): 1-15.
+
 source("../shared_scripts/effectors_from_literature.R", 
        local = knitr::knit_global())
 
@@ -205,7 +209,7 @@ totalsecreted <- unique(c(pts.id$protein_id, pfameffectors.id$protein_id, knowne
 totalsecreted.id <- gtf.faa.omicsbox[gtf.faa.omicsbox$protein_id %in% totalsecreted, ]
 ```
 
-```{r}
+```{r, warning=FALSE}
 source("../shared_scripts/detected_pcgenes.R", 
        local = knitr::knit_global())
 
@@ -245,7 +249,7 @@ dev.off()
  EffectorP analysis 
 #####################
 
-```{r}
+```{r, warning=FALSE}
 output_file <- "../PcEffector//EffectorP_3.0.0-beta/totalsecreted.fasta"
 
 generate_fasta_file(totalsecreted.id, output_file)
@@ -256,56 +260,37 @@ setwd("~/projects/Schroeter_Pcinnamomi/PcEffector/EffectorP_3.0.0-beta/")
 system("/home/barry/.virtualenvs/my-python/bin/python EffectorP.py -i totalsecreted.fasta > totalsecreted_effectorPresults.txt")
 ```
 
-3615 proteins were provided as input in the following file: totalsecreted.fasta
------------------
-Number of predicted effectors: 1315
-Number of predicted cytoplasmic effectors: 882
-Number of predicted apoplastic effectors: 433
------------------
-36.4 percent are predicted effectors.
-24.4 percent are predicted cytoplasmic effectors.
-12.0 percent are predicted apoplastic effectors.
------------------
-4.2 percent of the cytoplasmic effectors are predicted dual-localized (cytoplasmic/apoplastic).
-10.9 percent of the apoplastic effectors are predicted dual-localized (apoplastic/cytoplasmic).
-
 ```{r}
 effectorptotal.results <- read.delim("EffectorP_3.0.0-beta/totalsecreted_effectorPresults.txt", sep = "\t", stringsAsFactors = FALSE, skip = 10)
 effectorptotal.results <- effectorptotal.results[1:(nrow(effectorptotal.results) - 15), ]
 colnames(effectorptotal.results) <- c("protein_id", "Cytoplasmic_effector", "Apoplastic_effector", "Non_effector", "Prediction")
 effectorptotal.results$protein_id <- gsub(" ", "", effectorptotal.results$protein_id)
 
-head(effectorptotal.results)
-
 # make this all non effectors from effectorP
 predictedtotaleffectors <- subset(effectorptotal.results, Prediction != "Non-effector")
 predictedtotaleffectors.id <- dplyr::right_join(gtf.faa.omicsbox, predictedtotaleffectors, by = 'protein_id')
 
+effectorptotal.output <- tail(read.delim("EffectorP_3.0.0-beta/totalsecreted_effectorPresults.txt", sep = "\t", stringsAsFactors = FALSE), 15)
+view(effectorptotal.output)
+
 ```
 
-```{r}
+```{r, warning=FALSE}
 output_file <- "../PcEffector//EffectorP_3.0.0-beta/inplantasecreted.fasta"
 
 generate_fasta_file(inplantasecreted.id, output_file)
 
-#path to where the 
 setwd("~/projects/Schroeter_Pcinnamomi/PcEffector/EffectorP_3.0.0-beta/")
 
 system("/home/barry/.virtualenvs/my-python/bin/python EffectorP.py -i inplantasecreted.fasta > inplantasecreted_effectorPresults.txt")
 
 ```
-2607 proteins were provided as input in the following file: inplantasecreted.fasta
------------------
-Number of predicted effectors: 824
-Number of predicted cytoplasmic effectors: 582
-Number of predicted apoplastic effectors: 242
------------------
-31.6 percent are predicted effectors.
-22.3 percent are predicted cytoplasmic effectors.
-9.3 percent are predicted apoplastic effectors.
------------------
-3.6 percent of the cytoplasmic effectors are predicted dual-localized (cytoplasmic/apoplastic).
-12.0 percent of the apoplastic effectors are predicted dual-localized (apoplastic/cytoplasmic).
+
+```{r}
+effectorpinplanta.output <- tail(read.delim("EffectorP_3.0.0-beta/inplantasecreted_effectorPresults.txt", sep = "\t", stringsAsFactors = FALSE), 15)
+view(effectorpinplanta.output)
+```
+
 
 ```{r}
 effectorpinplanta.results <- read.delim("EffectorP_3.0.0-beta/inplantasecreted_effectorPresults.txt", sep = "\t", stringsAsFactors = FALSE, skip = 10)
@@ -328,7 +313,6 @@ inplantaeffectors.id <- dplyr::right_join(gtf.faa.omicsbox, inplantaeffectors, b
 ```
 
 ```{r, effector expression}
-#load("Pcdeseq2.RData")
 
 earlydetected <- as.data.frame(res_early_vs_vegetative)
 earlydetected$gene_id <- rownames(earlydetected)
@@ -371,7 +355,7 @@ height <- 6
 
 png(filename, width = width, height = height, units = "in", res = 300)
 
-secreted <- list("Earlyup"=eeup, "Earlydn"=eedn, "Midup"=meup, "Middn"=medn, "Lateup"=leup,"Latedn"=ledn)
+secreted <- list("Early_up"=eeup, "Early_down"=eedn, "Mid_up"=meup, "Mid_down"=medn, "Late_up"=leup,"Late_down"=ledn)
 
 plot(euler(secreted),quantities = TRUE, labels = list(font = 24), main="In Planta secretome expression")
 
@@ -403,8 +387,6 @@ sets <- rbind(bg.set, all.set, Noneffector.set, apop.set, cyto.set)
 ```
 
 ```{r}
-library(clusterProfiler)
-
 ora_res <- as.data.frame(enricher(gene = leup,
                                     universe = bg,
                                     maxGSSize = 50000,
@@ -464,12 +446,15 @@ x_labels <- c("Early", "Middle", "Late")
 combined_data$Dataset <- factor(combined_data$Dataset, levels = dataset_order, labels = x_labels)
 
 # Set the filename for the PNG file
-filename <- "cytoplasmic-apoplastic_effector1.png"
+filename <- "cytoplasmic-apoplastic_effector.png"
 
-# Create a PNG device
 png(filename)
 
-# Create the line plot
+width <- 8  
+height <- 8  
+
+png(filename, width = width, height = height, units = "in", res = 300)
+
 ggplot(combined_data, aes(x = Dataset, y = ES, color = GeneSet, group = GeneSet)) +
   geom_line() +
   geom_point() +
@@ -480,19 +465,22 @@ ggplot(combined_data, aes(x = Dataset, y = ES, color = GeneSet, group = GeneSet)
 
 dev.off()
 ```
-```{r}
-genesets <- read.gmt("goterms.gmt")
-bg <- detectedgenes.id$gene_id
 
-ora_res <- as.data.frame(enricher(gene = eeup,
+```{r}
+
+```
+
+```{r}
+run_enrichment <- function(gene_set, genesets, bg) {
+  ora_res <- as.data.frame(enricher(gene = gene_set,
                                     universe = bg,
                                     maxGSSize = 50000,
                                     TERM2GENE = genesets,
                                     pAdjustMethod = "fdr",
                                     pvalueCutoff = 1,
                                     qvalueCutoff = 1))
-
-ora_res$geneID <- NULL
+  
+  ora_res$geneID <- NULL
   ora_res_names <- rownames(ora_res)
   
   ora_res$GeneRatio <- as.character(ora_res$GeneRatio)
@@ -507,99 +495,205 @@ ora_res$geneID <- NULL
   ora_res <- ora_res[order(-ora_res$es), ]
   ora_res$Description <- NULL
   
-view(ora_res)  
+  top_10 <- head(ora_res[ora_res$p.adjust < 0.05, ], 10)
+  
+  return(top_10)
+}
 
-eeESgo <- ora_res
+# Usage example
+genesets <- read.gmt("goterms.gmt")
+bg <- detectedgenes.id$gene_id
+
+GOeeup <- run_enrichment(eeup, genesets, bg)
+GOeedn <- run_enrichment(eedn, genesets, bg)
+GOmeup <- run_enrichment(meup, genesets, bg)
+GOmedn <- run_enrichment(medn, genesets, bg)
+GOleup <- run_enrichment(leup, genesets, bg)
+GOledn <- run_enrichment(ledn, genesets, bg)
 ```
 
-```{r}
-library(ggplot2)
-
-esig <- subset(earlysecreted, padj < 0.05)
-enonsig <- subset(earlysecreted, padj > 0.05)
-msig <- subset(midsecreted, padj < 0.05)
-mnonsig <- subset(midsecreted, padj > 0.05)
-lsig <- subset(latesecreted, padj < 0.05)
-lnonsig <- subset(latesecreted, padj > 0.05)
 
 
-plot(log10(res_early_vs_vegetative$baseMean), res_early_vs_vegetative$log2FoldChange,
-     xlab = "log10 basemean", ylab = "log2 foldchange",
-     pch = 19, cex = 0.5, col = "dark gray",
-     main = "Early effectors")
-points(log10(esig$baseMean), esig$log2FoldChange,
-       pch = 19, cex = 0.5, col = "blue")
-points(log10(enonsig$baseMean), enonsig$log2FoldChange,
-       pch = 19, cex = 0.5, col = "red")
+```{r, early secreted smear}
+eesig <- dplyr::right_join(earlysecreted, inplantaeffectors.id, by = 'gene_id') 
+eesig <- subset(eesig, padj < 0.05)
+# early significant secreted
+essig <- subset(earlysecreted, padj < 0.05)
+# early non-significant secreted 
+esnonsig <- subset(earlysecreted, padj > 0.05)
 
+eesup <- rownames(subset(eesig, log2FoldChange > 2 & padj < 0.05))
+eesdn <- rownames(subset(eesig, log2FoldChange < 2 & padj < 0.05))
+essup <- rownames(subset(essig, log2FoldChange > 2 & padj < 0.05))
+essdn <- rownames(subset(essig, log2FoldChange < 2 & padj < 0.05))
 
-plot(log10(res_middle_vs_vegetative$baseMean), res_middle_vs_vegetative$log2FoldChange,
-     xlab = "log10 basemean", ylab = "log2 foldchange",
-     pch = 19, cex = 0.5, col = "dark gray",
-     main = "Mid effectors")
-points(log10(msig$baseMean), msig$log2FoldChange,
-       pch = 19, cex = 0.5, col = "blue")
-points(log10(mnonsig$baseMean), mnonsig$log2FoldChange,
-       pch = 19, cex = 0.5, col = "red")
+# Calculate the gene counts
+ESGENESUP <- length(essup)
+ESGENESDN <- length(essdn)
+EEGENESUP <- length(eesup)
+EEGENESDN <- length(eesdn)
 
+# Create the subtitle using the gene counts
+SUBHEADER <- paste(ESGENESUP, "Secreted genes Up-regulated (", EEGENESUP, "effectors),",
+                    ESGENESDN, "Secreted genes down-regulated (", EEGENESDN, "effectors)")
 
-plot(log10(res_late_vs_vegetative$baseMean), res_late_vs_vegetative$log2FoldChange,
-     xlab = "log10 basemean", ylab = "log2 foldchange",
-     pch = 19, cex = 0.5, col = "dark gray",
-     main = "Late effectors")
-points(log10(lsig$baseMean), lsig$log2FoldChange,
-       pch = 19, cex = 0.5, col = "blue")
-points(log10(lnonsig$baseMean), lnonsig$log2FoldChange,
-       pch = 19, cex = 0.5, col = "red")
-
-```
-
-```{r}
-library(ggplot2)
-
-# Extract columns from DESeqResults object
 res_df <- data.frame(
   baseMean = res_early_vs_vegetative$baseMean,
   log2FoldChange = res_early_vs_vegetative$log2FoldChange
 )
 
-# Create the smear plot
+filename <- "Earlysecretedplot.png"
+
+# Create a PNG device
+png(filename)
+
+width <- 10  
+height <- 6  
+
+png(filename, width = width, height = height, units = "in", res = 300)
 ggplot(res_df, aes(x = log10(baseMean), y = log2FoldChange)) +
-  geom_point(color = "darkgray", alpha = 0.5) +
-  xlab("log10 basemean") +
-  ylab("log2 foldchange") +
-  ggtitle("Smear Plot") +
-  
-  # Add significant points in blue
-  geom_point(data = esig, aes(x = log10(baseMean), y = log2FoldChange),
-             color = "blue", alpha = 0.5) +
-  
-  # Add non-significant points in red
-  geom_point(data = enonsig, aes(x = log10(baseMean), y = log2FoldChange),
-             color = "red", alpha = 0.5)
+  geom_point(color = "gray", alpha = 0.5, size = 2, shape = 19) +
+  geom_point(data = essig, aes(color = "Effector"), size = 2, shape = 19) +
+  geom_point(data = eesig, aes(color = "Secreted"), size = 2, shape = 19) +
+  geom_point(data = esnonsig, aes(color = "Non-significant"), size = 2, shape = 19) +
+  labs(x = "log10 basemean", y = "log2 foldchange") +
+  scale_color_manual(values = c("Effector" = "red", "Secreted" = "blue", "Non-significant" = "black"),
+                     name = "") +
+  theme_bw() +
+  theme(axis.line = element_line(color = "black"),
+        panel.border = element_rect(color = "black"),
+        panel.grid.major = element_line(color = "grey"),  
+        panel.grid.minor = element_blank(),
+        legend.position = c(0.05, 0.99),  
+        legend.justification = c(0, 1),  
+        legend.background = element_rect(fill = NA, size = 0.5),
+        legend.key.size = unit(1, "lines")) +
+  ggtitle(expression(paste(italic("Phytophthora cinnamomi"), " secreted genes expressed during early interaction"))) +
+  labs(subtitle = SUBHEADER) +
+  theme(plot.title = element_text(face = "bold", size = 16))
 
+dev.off()
 ```
+```{r, middle secreted smear}
+mesig <- dplyr::right_join(midsecreted, inplantaeffectors.id, by = 'gene_id') 
+mesig <- subset(mesig, padj < 0.05)
+# early significant secreted
+mssig <- subset(midsecreted, padj < 0.05)
+# early non-significant secreted 
+msnonsig <- subset(midsecreted, padj > 0.05)
 
+mesup <- rownames(subset(mesig, log2FoldChange > 2 & padj < 0.05))
+mesdn <- rownames(subset(mesig, log2FoldChange < 2 & padj < 0.05))
+mssup <- rownames(subset(mssig, log2FoldChange > 2 & padj < 0.05))
+mssdn <- rownames(subset(mssig, log2FoldChange < 2 & padj < 0.05))
 
-smear plot that shows the effectors. x=log10 base mean, y=log2 fold change. It will indicate which effectors have the largest overall expression and fold change. You can label the significant effectors red, the non significant effectors blue and all other genes grey in the background.  For the significant effectors with the largest basemean expression, you can add a gene label. You can focus on those ones in your discussion perhaps.
+# Calculate the gene counts
+mSGENESUP <- length(mssup)
+mSGENESDN <- length(mssdn)
+mEGENESUP <- length(mesup)
+mEGENESDN <- length(mesdn)
 
-```{r}
-library(plotly)
+# Create the subtitle using the gene counts
+SUBHEADER <- paste(mSGENESUP, "Secreted genes Up-regulated (", mEGENESUP, "effectors),",
+                    mSGENESDN, "Secreted genes down-regulated (", mEGENESDN, "effectors)")
 
-# Convert DESeqResults object to a data frame
-res_df <- as.data.frame(res_early_vs_vegetative)
+res_df <- data.frame(
+  baseMean = res_middle_vs_vegetative$baseMean,
+  log2FoldChange = res_middle_vs_vegetative$log2FoldChange
+)
 
-# Create the interactive smear plot
-plot_ly(res_df, x = ~log10(baseMean), y = ~log2FoldChange, color = I("darkgray"),
-        type = "scatter", mode = "markers", marker = list(opacity = 0.5)) %>%
-  add_markers(data = esig, color = I("blue"), hovertext = ~gene_id, hoverinfo = "text") %>%
-  add_markers(data = enonsig, color = I("red"), hovertext = ~gene_id, hoverinfo = "text") %>%
-  layout(xaxis = list(title = "log10 basemean"),
-         yaxis = list(title = "log2 foldchange"),
-         title = "Smear Plot")
+filename <- "Midsecretedplot.png"
+
+# Create a PNG device
+png(filename)
+
+width <- 10  
+height <- 6  
+
+png(filename, width = width, height = height, units = "in", res = 300)
+ggplot(res_df, aes(x = log10(baseMean), y = log2FoldChange)) +
+  geom_point(color = "gray", alpha = 0.5, size = 2, shape = 19) +
+  geom_point(data = mssig, aes(color = "Effector"), size = 2, shape = 19) +
+  geom_point(data = mesig, aes(color = "Secreted"), size = 2, shape = 19) +
+  geom_point(data = msnonsig, aes(color = "Non-significant"), size = 2, shape = 19) +
+  labs(x = "log10 basemean", y = "log2 foldchange") +
+  scale_color_manual(values = c("Effector" = "red", "Secreted" = "blue", "Non-significant" = "black"),
+                     name = "") +
+  theme_bw() +
+  theme(axis.line = element_line(color = "black"),
+        panel.border = element_rect(color = "black"),
+        panel.grid.major = element_line(color = "grey"),  
+        panel.grid.minor = element_blank(),
+        legend.position = c(0.05, 0.99),  
+        legend.justification = c(0, 1),  
+        legend.background = element_rect(fill = NA, size = 0.5),
+        legend.key.size = unit(1, "lines")) +
+  ggtitle(expression(paste(italic("Phytophthora cinnamomi"), " secreted genes expressed during middle interaction"))) +
+  labs(subtitle = SUBHEADER) +
+  theme(plot.title = element_text(face = "bold", size = 16))
+
+dev.off()
 ```
+```{r, late secreted smear}
+lesig <- dplyr::right_join(latesecreted, inplantaeffectors.id, by = 'gene_id') 
+lesig <- subset(lesig, padj < 0.05)
+# early significant secreted
+lssig <- subset(latesecreted, padj < 0.05)
+# early non-significant secreted 
+lsnonsig <- subset(latesecreted, padj > 0.05)
 
+lesup <- rownames(subset(lesig, log2FoldChange > 2 & padj < 0.05))
+lesdn <- rownames(subset(lesig, log2FoldChange < 2 & padj < 0.05))
+lssup <- rownames(subset(lssig, log2FoldChange > 2 & padj < 0.05))
+lssdn <- rownames(subset(lssig, log2FoldChange < 2 & padj < 0.05))
 
+# Calculate the gene counts
+lSGENESUP <- length(lssup)
+lSGENESDN <- length(lssdn)
+lEGENESUP <- length(lesup)
+lEGENESDN <- length(lesdn)
+
+# Create the subtitle using the gene counts
+SUBHEADER <- paste(lSGENESUP, "Secreted genes Up-regulated (", lEGENESUP, "effectors),",
+                    lSGENESDN, "Secreted genes down-regulated (", lEGENESDN, "effectors)")
+
+res_df <- data.frame(
+  baseMean = res_late_vs_vegetative$baseMean,
+  log2FoldChange = res_late_vs_vegetative$log2FoldChange
+)
+
+filename <- "Latesecretedplot.png"
+
+# Create a PNG device
+png(filename)
+
+width <- 10  
+height <- 6  
+
+png(filename, width = width, height = height, units = "in", res = 300)
+ggplot(res_df, aes(x = log10(baseMean), y = log2FoldChange)) +
+  geom_point(color = "gray", alpha = 0.5, size = 2, shape = 19) +
+  geom_point(data = mssig, aes(color = "Effector"), size = 2, shape = 19) +
+  geom_point(data = mesig, aes(color = "Secreted"), size = 2, shape = 19) +
+  geom_point(data = msnonsig, aes(color = "Non-significant"), size = 2, shape = 19) +
+  labs(x = "log10 basemean", y = "log2 foldchange") +
+  scale_color_manual(values = c("Effector" = "red", "Secreted" = "blue", "Non-significant" = "black"),
+                     name = "") +
+  theme_bw() +
+  theme(axis.line = element_line(color = "black"),
+        panel.border = element_rect(color = "black"),
+        panel.grid.major = element_line(color = "grey"),  
+        panel.grid.minor = element_blank(),
+        legend.position = c(0.05, 0.99),  
+        legend.justification = c(0, 1),  
+        legend.background = element_rect(fill = NA, size = 0.5),
+        legend.key.size = unit(1, "lines")) +
+  ggtitle(expression(paste(italic("Phytophthora cinnamomi"), " secreted genes expressed during late interaction"))) +
+  labs(subtitle = SUBHEADER) +
+  theme(plot.title = element_text(face = "bold", size = 16))
+
+dev.off()
+```
 
 ## Session information
 
