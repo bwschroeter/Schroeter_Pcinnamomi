@@ -1,5 +1,11 @@
-
-```{r, libs, message=FALSE}
+---
+title: "Chapter 3:Effector analysis"
+author: "BWSchroeter"
+date: "2023-06-23"
+output: html_document
+---
+ 
+```{r, libs, message=FALSE, warning=FALSE}
 
 library(tidyverse)
 library(gridExtra)
@@ -11,6 +17,7 @@ library(clusterProfiler)
 library(ggplot2)
 library("kableExtra")
 library("eulerr")
+library(pheatmap)
 ```
 
 ```{r, include=FALSE}
@@ -42,9 +49,7 @@ generate_fasta_file(df, output_file)
 
 ```
 
-#######################
- InterProScan analysis
-#######################
+#InterProScan analysis
 
 barry@ziemann-01:/mnt/data/barry/projects/Schroeter_Pcinnamomi/PcEffector/interproscan/interproscan-5.62-94.0$ ./interproscan.sh -appl CDD,PANTHER,Pfam,PROSITEPATTERNS,PROSITEPROFILES,SFLD,SMART,TIGRFAM,Phobius,TMHMM,SUPERFAMILY -i /mnt/data/barry/projects/Schroeter_Pcinnamomi/PcEffector/Raw_fasta/allpcgenes.fasta -iprlookup --goterms -b /mnt/data/barry/projects/Schroeter_Pcinnamomi/PcEffector/interproscan_output/
 05/06/2023 12:56:46:576 Welcome to InterProScan-5.62-94.0
@@ -63,7 +68,7 @@ Matches for any sequences that are not represented in the lookup service will be
 05/06/2023 15:59:51:007 77% completed
 05/06/2023 16:12:19:464 100% done:  InterProScan analyses completed 
 
-```{r, warning=FALSE}
+```{r, message=FALSE, warning=FALSE}
 # RxLR, CRN and NLP predicted from Engelbrecht, Juanita, et al. "Genome of the destructive oomycete Phytophthora cinnamomi provides insights into its pathogenicity and adaptive potential." BMC genomics 22.1 (2021): 1-15.
 
 source("../shared_scripts/effectors_from_literature.R", 
@@ -101,9 +106,9 @@ Ranking effector candidates according to their expression during infection with 
 
 Sperschneider, J., Gardiner, D.M., Dodds, P.N., Tini, F., Covarelli, L., Singh, K.B., Manners, J.M. and Taylor, J.M. (2016), EffectorP: predicting fungal effector proteins from secretomes using machine learning. New Phytol, 210: 743-761. https://doi.org/10.1111/nph.13794
 
-##################
- SignalP analysis
-##################
+
+#SignalP analysis
+
 
 setwd("~/projects/Schroeter_Pcinnamomi/PcEffector/signalp-6.0/signalp6_fast/")
 Sys.setenv(PATH = paste("/home/barry/.local/bin", Sys.getenv("PATH"), sep = ":"))
@@ -119,7 +124,7 @@ system("signalp6 --fastafile ~/projects/Schroeter_Pcinnamomi/PcEffector/Raw_fast
 system("signalp6 --fastafile ~/projects/Schroeter_Pcinnamomi/PcEffector/Raw_fasta/allpcgenes.fasta --organism eukarya --output_dir ~/projects/Schroeter_Pcinnamomi/PcEffector/SignalPall_output --format none --mode fast")
 Predicting: 100%|██████████| 21334/21334 [39:18<00:00,  9.05sequences/s]
 
-# run on signalP_6.0 and import results 
+run on signalP_6.0 and import results 
 
 ```{r}
 # Read the prediction_results.txt file into a data frame
@@ -171,9 +176,7 @@ pts.id <- gtf.faa.omicsbox[gtf.faa.omicsbox$protein_id %in% phobius.tmhmm.signal
 #3373 predicted secreted proteins using EffectorP3.0 suggestion
 ```
 
-################
- bdCAN analysis
-################
+#bdCAN analysis
 
 https://bcb.unl.edu/dbCAN2/blast.php using allpcgenes.fasta
 
@@ -221,7 +224,7 @@ inplantadetected <- unique(detectedgenes.id$protein_id)
 inplantasecreted.id <- totalsecreted.id[totalsecreted.id$protein_id %in% inplantadetected, ]
 ```
 
-```{r, secretome eulerr plot}
+```{r, secretome eulerr plot, warning=FALSE}
 
 s1 <- unique(pfameffectors.id$protein_id)
 s2 <- unique(knowneffectors.id$protein_id)
@@ -244,36 +247,11 @@ plot(euler(SECRETOME),quantities = TRUE, labels = list(font = 24), main="Predict
 
 dev.off()
 ```
-
-#####################
- EffectorP analysis 
-#####################
-
-```{r, warning=FALSE}
-output_file <- "../PcEffector//EffectorP_3.0.0-beta/totalsecreted.fasta"
-
-generate_fasta_file(totalsecreted.id, output_file)
-
-#path to where the 
-setwd("~/projects/Schroeter_Pcinnamomi/PcEffector/EffectorP_3.0.0-beta/")
-
-system("/home/barry/.virtualenvs/my-python/bin/python EffectorP.py -i totalsecreted.fasta > totalsecreted_effectorPresults.txt")
+```{r, echo=FALSE, out.width='100%'}
+knitr::include_graphics("/mnt/data/barry/projects/Schroeter_Pcinnamomi/PcEffector/predictedsecretome.png")
 ```
 
-```{r}
-effectorptotal.results <- read.delim("EffectorP_3.0.0-beta/totalsecreted_effectorPresults.txt", sep = "\t", stringsAsFactors = FALSE, skip = 10)
-effectorptotal.results <- effectorptotal.results[1:(nrow(effectorptotal.results) - 15), ]
-colnames(effectorptotal.results) <- c("protein_id", "Cytoplasmic_effector", "Apoplastic_effector", "Non_effector", "Prediction")
-effectorptotal.results$protein_id <- gsub(" ", "", effectorptotal.results$protein_id)
-
-# make this all non effectors from effectorP
-predictedtotaleffectors <- subset(effectorptotal.results, Prediction != "Non-effector")
-predictedtotaleffectors.id <- dplyr::right_join(gtf.faa.omicsbox, predictedtotaleffectors, by = 'protein_id')
-
-effectorptotal.output <- tail(read.delim("EffectorP_3.0.0-beta/totalsecreted_effectorPresults.txt", sep = "\t", stringsAsFactors = FALSE), 15)
-view(effectorptotal.output)
-
-```
+#EffectorP analysis 
 
 ```{r, warning=FALSE}
 output_file <- "../PcEffector//EffectorP_3.0.0-beta/inplantasecreted.fasta"
@@ -292,7 +270,7 @@ view(effectorpinplanta.output)
 ```
 
 
-```{r}
+```{r,echo=FALSE}
 effectorpinplanta.results <- read.delim("EffectorP_3.0.0-beta/inplantasecreted_effectorPresults.txt", sep = "\t", stringsAsFactors = FALSE, skip = 10)
 effectorpinplanta.results <- effectorpinplanta.results[1:(nrow(effectorpinplanta.results) - 15), ]
 colnames(effectorpinplanta.results) <- c("protein_id", "Cytoplasmic_effector", "Apoplastic_effector", "Non_effector", "Prediction")
@@ -312,7 +290,7 @@ inplantaeffectors.id <- dplyr::right_join(gtf.faa.omicsbox, inplantaeffectors, b
 # 824 effector genes in planta
 ```
 
-```{r, effector expression}
+```{r, effector expression, echo=FALSE}
 
 earlydetected <- as.data.frame(res_early_vs_vegetative)
 earlydetected$gene_id <- rownames(earlydetected)
@@ -328,7 +306,7 @@ latesecreted <- dplyr::right_join(latedetected, inplantasecreted.id, by = 'gene_
 
 ```
 
-```{r, effector eulerr plot}
+```{r, effector expression eulerr plot, echo=FALSE}
 
 eeup <- earlysecreted[earlysecreted$log2FoldChange > 0 & earlysecreted$padj < 0.05, ]
 eeup <- unique(eeup$gene_id)
@@ -362,9 +340,41 @@ plot(euler(secreted),quantities = TRUE, labels = list(font = 24), main="In Plant
 dev.off()
 ```
 
-```{r, effector ORA}
+```{r, echo=FALSE, out.width='100%'}
+knitr::include_graphics("/mnt/data/barry/projects/Schroeter_Pcinnamomi/PcEffector/Effectorexpression.png")
+```
 
+```{r, upregulated effector ORA, echo=FALSE}
+performEnrichmentAnalysis <- function(geneSet, sets, bg) {
+  ora_res <- as.data.frame(enricher(gene = geneSet,
+                                    universe = bg,
+                                    maxGSSize = 50000,
+                                    TERM2GENE = sets,
+                                    pAdjustMethod = "fdr",
+                                    pvalueCutoff = 1,
+                                    qvalueCutoff = 1))
+  
+  ora_res$geneID <- NULL
+  ora_res_names <- rownames(ora_res)
+  
+  ora_res$GeneRatio <- as.character(ora_res$GeneRatio)
+  
+  gr <- as.numeric(sapply(strsplit(as.character(ora_res$GeneRatio), "/"), "[[", 1)) /
+    as.numeric(sapply(strsplit(as.character(ora_res$GeneRatio), "/"), "[[", 2))
+  
+  br <- as.numeric(sapply(strsplit(as.character(ora_res$BgRatio), "/"), "[[", 1)) /
+    as.numeric(sapply(strsplit(as.character(ora_res$BgRatio), "/"), "[[", 2))
+  
+  ora_res$es <- gr/br
+  ora_res <- ora_res[order(-ora_res$es), ]
+  ora_res$Description <- NULL
+  
+  return(ora_res)
+}
+
+# Define the sets and bg dataframes
 bg <- detectedgenes.id$gene_id
+
 bg.set <- data.frame("background", bg)
 colnames(bg.set) <- c("term", "gene")
 
@@ -384,69 +394,327 @@ colnames(cyto.set) <- c("term", "gene")
 
 sets <- rbind(bg.set, all.set, Noneffector.set, apop.set, cyto.set)
 
+ESeeup <- performEnrichmentAnalysis(eeup, sets, bg)
+ESmeup <- performEnrichmentAnalysis(meup, sets, bg)
+ESleup <- performEnrichmentAnalysis(leup, sets, bg)
+
+```
+
+```{r, expression data}
+dds_genes <- dds
+
+# Extract the expression values for the top genes
+dds_gene_expression <- assay(dds)[rownames(dds_genes), ]
+
+# Create a matrix of log2-transformed expression values
+log2_dds_expression <- log2(dds_gene_expression + 1)
+
+# Convert the matrix to a dataframe
+dds.df <- as.data.frame(log2_dds_expression)
+
+# Create a new column named "gene_id" and assign the rownames to it
+dds.df$gene_id <- rownames(dds.df)
+
+# Reset the rownames of the matrix
+rownames(dds.df) <- NULL
+
 ```
 
 ```{r}
-ora_res <- as.data.frame(enricher(gene = leup,
-                                    universe = bg,
-                                    maxGSSize = 50000,
-                                    TERM2GENE = sets,
-                                    pAdjustMethod = "fdr",
-                                    pvalueCutoff = 1,
-                                    qvalueCutoff = 1))
 
-ora_res$geneID <- NULL
-  ora_res_names <- rownames(ora_res)
-  
-  ora_res$GeneRatio <- as.character(ora_res$GeneRatio)
-  
-  gr <- as.numeric(sapply(strsplit(as.character(ora_res$GeneRatio), "/"), "[[", 1)) /
-    as.numeric(sapply(strsplit(as.character(ora_res$GeneRatio), "/"), "[[", 2))
-  
-  br <- as.numeric(sapply(strsplit(as.character(ora_res$BgRatio), "/"), "[[", 1)) /
-    as.numeric(sapply(strsplit(as.character(ora_res$BgRatio), "/"), "[[", 2))
-  
-  ora_res$es <- gr/br
-  ora_res <- ora_res[order(-ora_res$es), ]
-  ora_res$Description <- NULL
-  
-view(ora_res)  
+rxlr <- pcrxlr$gene_id
+rxlr.de <- dds.df[dds.df$gene_id %in% rxlr, ]
+rownames(rxlr.de) <- rxlr.de$gene_id
+rxlr.de$gene_id <- NULL
 
-leESraw <- ora_res
+col_ann <- colData[,c(1,3)]
+rownames(col_ann) <- col_ann$Sample
+col_ann <- data.frame(col_ann)
+col_ann$Stage <- as.factor(col_ann$Stage)
+col_ann <- col_ann[order(col_ann$Stage),]
+col_ann$sample_ID <- NULL
+
+col_ann$Stage <- factor(col_ann$Stage, levels = c("Vegetative", "Early", "Middle", "Late"))
+
+# Sort the `col_ann` dataframe based on the ordered `Stage` column
+col_ann <- col_ann[order(col_ann$Stage), ]
+
+filename <- "RxLR_normalized.png"
+width <- 6400 
+height <- 6400
+pointsize <- 10
+resolution <- 600
+
+png(filename, width = width, height = height, pointsize = pointsize, res = resolution)
+
+pheatmap(rxlr.de,  scale = "row",
+         cluster_rows = TRUE, cluster_cols = F,
+         display_numbers = F, 
+         fontsize_row = 8, fontsize_col = 8, 
+         annotation_col = col_ann,
+         show_colnames = FALSE,
+         cellheight = 8, cellwidth = 40,
+         main = "RxLR- normalized counts")
+dev.off()
+```
+
+```{r,fig.height=8, fig.width=12}
+knitr::include_graphics("/mnt/data/barry/projects/Schroeter_Pcinnamomi/PcEffector/RxLR_normalized.png")
+```
+
+IUM83_06578 rxlr rna helicase
+IUM83_10648 rxlr nudix
+
+```{r }
+rxlr <- pcrxlr$gene_id
+
+rxlrede <- earlydetected[earlydetected$gene_id %in% rxlr, ]
+rxlrmde <- middetected[middetected$gene_id %in% rxlr, ]
+rxlrlde <- latedetected[latedetected$gene_id %in% rxlr, ]
+
+data_matrix <- matrix(
+  c(rxlrede$log2FoldChange, rxlrmde$log2FoldChange, rxlrlde$log2FoldChange),
+  nrow = length(rxlrede$log2FoldChange),
+  ncol = 3,
+  byrow = FALSE
+)
+
+rownames(data_matrix) <- rxlrede$gene_id
+colnames(data_matrix) <- c("Early", "Middle", "Late")
+
+filename <- "RxLR_Log2Fold.png"
+png(filename, width = width, height = height, pointsize = pointsize, res = resolution)
+
+# Create the heatmap with row labels
+pheatmap(data_matrix,
+         fontsize_row = 8, fontsize_col = 8, 
+         cellheight = 8, cellwidth = 80,
+         cluster_rows = TRUE,
+         cluster_cols = FALSE,
+         show_rownames = TRUE,
+         labels_row = rxlrede$gene_id,
+         main = "RxLR - log2FoldChange")
+dev.off()
+
 ```
 
 ```{r}
-# Create a data frame for eeES, meES, and leES
-eeES <- data.frame(
-  Dataset = "eeES",
-  GeneSet = c("Cytosolic", "Apoplastic", "Non_effector"),
-  ES = c(7.335492, 6.962049, 4.525169)
+knitr::include_graphics("/mnt/data/barry/projects/Schroeter_Pcinnamomi/PcEffector/RxLR_Log2Fold.png")
+```
+IUM83_06578 rxlr rna helicase
+IUM83_10648 rxlr nudix
+```{r}
+
+crn <- pccrn$gene_id
+crn.de <- dds.df[dds.df$gene_id %in% crn, ]
+rownames(crn.de) <- crn.de$gene_id
+crn.de$gene_id <- NULL
+
+col_ann <- colData[,c(1,3)]
+rownames(col_ann) <- col_ann$Sample
+col_ann <- data.frame(col_ann)
+col_ann$Stage <- as.factor(col_ann$Stage)
+col_ann <- col_ann[order(col_ann$Stage),]
+col_ann$sample_ID <- NULL
+
+col_ann$Stage <- factor(col_ann$Stage, levels = c("Vegetative", "Early", "Middle", "Late"))
+
+
+col_ann <- col_ann[order(col_ann$Stage), ]
+
+filename <- "CRN_normalized.png"
+png(filename, width = width, height = height, pointsize = pointsize, res = resolution)
+
+pheatmap(crn.de,  scale = "row",
+         cluster_rows = TRUE, cluster_cols = F,
+         display_numbers = F, 
+         fontsize_row = 8, fontsize_col = 8, 
+         annotation_col = col_ann,
+         show_colnames = FALSE,
+         cellheight = 8, cellwidth = 40,
+         main = "CRN - normalized")
+dev.off()
+```
+
+```{r}
+knitr::include_graphics("/mnt/data/barry/projects/Schroeter_Pcinnamomi/PcEffector/CRN_normalized.png")
+```
+```{r}
+crnlog <- pccrn$gene_id
+
+crnede <- earlydetected[earlydetected$gene_id %in% crnlog, ]
+crnmde <- middetected[middetected$gene_id %in% crnlog, ]
+crnlde <- latedetected[latedetected$gene_id %in% crnlog, ]
+
+crn.matrix <- matrix(
+  c(crnede$log2FoldChange, crnmde$log2FoldChange, crnlde$log2FoldChange),
+  nrow = length(crnede$log2FoldChange),
+  ncol = 3,
+  byrow = FALSE
 )
 
-meES <- data.frame(
-  Dataset = "meES",
-  GeneSet = c("Cytosolic", "Apoplastic", "Non_effector"),
-  ES = c(6.932619, 6.749850, 4.776168)
+rownames(crn.matrix) <- crnede$gene_id
+colnames(crn.matrix) <- c("Early", "Middle", "Late")
+
+filename <- "CRN_Log2Fold.png"
+png(filename, width = width, height = height, pointsize = pointsize, res = resolution)
+
+# Create the heatmap with row labels
+pheatmap(crn.matrix,
+         fontsize_row = 8, fontsize_col = 8, 
+         cellheight = 8, cellwidth = 80,
+         cluster_rows = TRUE,
+         cluster_cols = FALSE,
+         show_rownames = TRUE,
+         labels_row = crnede$gene_id,
+         main = "CRN - log2Foldchange")
+dev.off()
+```
+
+```{r}
+knitr::include_graphics("/mnt/data/barry/projects/Schroeter_Pcinnamomi/PcEffector/CRN_Log2Fold.png")
+```
+
+```{r}
+
+nlp <- pcnlp$gene_id
+nlp.de <- dds.df[dds.df$gene_id %in% nlp, ]
+rownames(nlp.de) <- nlp.de$gene_id
+nlp.de$gene_id <- NULL
+
+col_ann <- colData[,c(1,3)]
+rownames(col_ann) <- col_ann$Sample
+col_ann <- data.frame(col_ann)
+col_ann$Stage <- as.factor(col_ann$Stage)
+col_ann <- col_ann[order(col_ann$Stage),]
+col_ann$sample_ID <- NULL
+
+desired_order <- c("Vegetative", "Early", "Middle", "Late")
+
+# Order the `col_ann` dataframe based on the specified order
+col_ann$Stage <- factor(col_ann$Stage, levels = desired_order)
+col_ann <- col_ann[order(col_ann$Stage), ]
+head(col_ann, 12)
+
+filename <- "NLP_mormalized.png"
+png(filename, width = width, height = height, pointsize = pointsize, res = resolution)
+
+pheatmap(nlp.de,  scale = "row",
+         cluster_rows = TRUE, cluster_cols = F,
+         display_numbers = F, 
+         fontsize_row = 8, fontsize_col = 8, 
+         annotation_col = col_ann,
+         show_colnames = FALSE,
+         cellheight = 8, cellwidth = 40,
+         main = "NLP")
+dev.off()
+```
+
+```{r}
+knitr::include_graphics("/mnt/data/barry/projects/Schroeter_Pcinnamomi/PcEffector/NLP_mormalized.png")
+```
+```{r}
+nlplog <- pcnlp$gene_id
+
+nlpede <- earlydetected[earlydetected$gene_id %in% nlplog, ]
+nlpmde <- middetected[middetected$gene_id %in% nlplog, ]
+nlplde <- latedetected[latedetected$gene_id %in% nlplog, ]
+
+nlp.matrix <- matrix(
+  c(nlpede$log2FoldChange, nlpmde$log2FoldChange, nlplde$log2FoldChange),
+  nrow = length(nlpede$log2FoldChange),
+  ncol = 3,
+  byrow = FALSE
 )
 
-leES <- data.frame(
-  Dataset = "leES",
-  GeneSet = c("Cytosolic", "Apoplastic", "Non_effector"),
-  ES = c(6.621752, 6.713086, 4.919242)
+rownames(nlp.matrix) <- nlpede$gene_id
+colnames(nlp.matrix) <- c("Early", "Middle", "Late")
+
+filename <- "NLP_Log2Fold.png"
+png(filename, width = width, height = height, pointsize = pointsize, res = resolution)
+
+# Create the heatmap with row labels
+pheatmap(nlp.matrix,
+         fontsize_row = 8, fontsize_col = 8, 
+         cellheight = 8, cellwidth = 80,
+         cluster_rows = TRUE,
+         cluster_cols = FALSE,
+         show_rownames = TRUE,
+         labels_row = crnede$gene_id,
+         main = "NLP - log2Foldchange")
+dev.off()
+```
+```{r, echo=FALSE, out.width='100%'}
+knitr::include_graphics("/mnt/data/barry/projects/Schroeter_Pcinnamomi/PcEffector/NLP_Log2Fold.png")
+```
+```{r}
+PF00964. <-PF00964$protein_id
+PF00964.id <- gtf.faa.omicsbox[gtf.faa.omicsbox$protein_id %in% PF00964., ]
+
+pfamlog <- PF00964.id$gene_id 
+
+pfamede <- earlydetected[earlydetected$gene_id %in% pfamlog, ]
+pfammde <- middetected[middetected$gene_id %in% pfamlog, ]
+pfamlde <- latedetected[latedetected$gene_id %in% pfamlog, ]
+
+pfam.matrix <- matrix(
+  c(pfamede$log2FoldChange, pfammde$log2FoldChange, pfamlde$log2FoldChange),
+  nrow = length(pfamede$log2FoldChange),
+  ncol = 3,
+  byrow = FALSE
 )
 
-# Combine the datasets
-combined_data <- rbind(eeES, meES, leES)
+rownames(pfam.matrix) <- pfamede$gene_id
+colnames(pfam.matrix) <- c("Early", "Middle", "Late")
 
-# Define the order and labels for the x-axis
-dataset_order <- c("eeES", "meES", "leES")
+filename <- "Pfam_Log2Fold.png"
+png(filename, width = width, height = height, pointsize = pointsize, res = resolution)
+
+# Create the heatmap with row labels
+pheatmap(pfam.matrix,
+         fontsize_row = 5, fontsize_col = 5, 
+         cellheight = 5, cellwidth = 80,
+         cluster_rows = TRUE,
+         cluster_cols = FALSE,
+         show_rownames = TRUE,
+         labels_row = pfamede$gene_id,
+         main = "Elicitin - log2Foldchange")
+dev.off()
+
+```
+
+```{r, echo=FALSE, out.width='100%'}
+knitr::include_graphics("/mnt/data/barry/projects/Schroeter_Pcinnamomi/PcEffector/Pfam_Log2Fold.png")
+```
+
+```{r, upregulated secreted lineplot, echo=FALSE}
+es_apop_ESeeup <- ESeeup[ESeeup$ID == "Apoplastic", "es"]
+es_cyto_ESeeup <- ESeeup[ESeeup$ID == "Cytosolic", "es"]
+es_non_effector_ESeeup <- ESeeup[ESeeup$ID == "Non_effector", "es"]
+
+es_apop_ESmeup <- ESmeup[ESmeup$ID == "Apoplastic", "es"]
+es_cyto_ESmeup <- ESmeup[ESmeup$ID == "Cytosolic", "es"]
+es_non_effector_ESmeup <- ESmeup[ESmeup$ID == "Non_effector", "es"]
+
+es_apop_ESleup <- ESleup[ESleup$ID == "Apoplastic", "es"]
+es_cyto_ESleup <- ESleup[ESleup$ID == "Cytosolic", "es"]
+es_non_effector_ESleup <- ESleup[ESleup$ID == "Non_effector", "es"]
+
+# Create a combined dataframe
+combined_data <- data.frame(Dataset = rep(c("ESeeup", "ESmeup", "ESleup"), each = 3),
+                            GeneSet = rep(c("Apoplastic", "Cytosolic", "Non_effector"), times = 3),
+                            ES = c(es_apop_ESeeup, es_cyto_ESeeup, es_non_effector_ESeeup,
+                                   es_apop_ESmeup, es_cyto_ESmeup, es_non_effector_ESmeup,
+                                   es_apop_ESleup, es_cyto_ESleup, es_non_effector_ESleup))
+
+
+dataset_order <- c("ESeeup", "ESmeup", "ESleup")
 x_labels <- c("Early", "Middle", "Late")
 
 # Convert the "Dataset" column to a factor with the desired order and labels
 combined_data$Dataset <- factor(combined_data$Dataset, levels = dataset_order, labels = x_labels)
 
-# Set the filename for the PNG file
-filename <- "cytoplasmic-apoplastic_effector.png"
+filename <- "Secreted_enrichment_scores.png"
 
 png(filename)
 
@@ -466,8 +734,8 @@ ggplot(combined_data, aes(x = Dataset, y = ES, color = GeneSet, group = GeneSet)
 dev.off()
 ```
 
-```{r}
-
+```{r, echo=FALSE, out.width='100%'}
+knitr::include_graphics("/mnt/data/barry/projects/Schroeter_Pcinnamomi/PcEffector/Secreted_enrichment_scores.png")
 ```
 
 ```{r}
@@ -504,15 +772,28 @@ run_enrichment <- function(gene_set, genesets, bg) {
 genesets <- read.gmt("goterms.gmt")
 bg <- detectedgenes.id$gene_id
 
-GOeeup <- run_enrichment(eeup, genesets, bg)
+GOeeup <- run_enrichment(eeup, genesets, bg) 
+rownames(GOeeup) <- NULL
 GOeedn <- run_enrichment(eedn, genesets, bg)
+rownames(GOeedn) <- NULL
 GOmeup <- run_enrichment(meup, genesets, bg)
+rownames(GOmeup) <- NULL
 GOmedn <- run_enrichment(medn, genesets, bg)
+rownames(GOmedn) <- NULL
 GOleup <- run_enrichment(leup, genesets, bg)
+rownames(GOleup) <- NULL
 GOledn <- run_enrichment(ledn, genesets, bg)
+rownames(GOledn) <- NULL
 ```
 
-
+```{r}
+GOeeup %>% kbl(caption="GO terms Early upregulated secreted") %>%   kable_paper("hover", full_width = F)
+GOeedn %>% kbl(caption="GO terms Early downregulated secreted") %>%   kable_paper("hover", full_width = F)
+GOmeup %>% kbl(caption="GO terms Mid upregulated secreted") %>%   kable_paper("hover", full_width = F)
+GOmedn %>% kbl(caption="GO terms Mid downregulated secreted") %>%   kable_paper("hover", full_width = F)
+GOleup %>% kbl(caption="GO terms Late upregulated secreted") %>%   kable_paper("hover", full_width = F)
+GOledn %>% kbl(caption="GO terms Late downregulated secreted") %>%   kable_paper("hover", full_width = F)
+```
 
 ```{r, early secreted smear}
 eesig <- dplyr::right_join(earlysecreted, inplantaeffectors.id, by = 'gene_id') 
@@ -574,6 +855,11 @@ ggplot(res_df, aes(x = log10(baseMean), y = log2FoldChange)) +
 
 dev.off()
 ```
+
+```{r, echo=FALSE, out.width='100%'}
+knitr::include_graphics("/mnt/data/barry/projects/Schroeter_Pcinnamomi/PcEffector/Earlysecretedplot.png")
+```
+
 ```{r, middle secreted smear}
 mesig <- dplyr::right_join(midsecreted, inplantaeffectors.id, by = 'gene_id') 
 mesig <- subset(mesig, padj < 0.05)
@@ -634,6 +920,11 @@ ggplot(res_df, aes(x = log10(baseMean), y = log2FoldChange)) +
 
 dev.off()
 ```
+
+```{r, echo=FALSE, out.width='100%'}
+knitr::include_graphics("/mnt/data/barry/projects/Schroeter_Pcinnamomi/PcEffector/Midsecretedplot.png")
+```
+
 ```{r, late secreted smear}
 lesig <- dplyr::right_join(latesecreted, inplantaeffectors.id, by = 'gene_id') 
 lesig <- subset(lesig, padj < 0.05)
@@ -693,6 +984,10 @@ ggplot(res_df, aes(x = log10(baseMean), y = log2FoldChange)) +
   theme(plot.title = element_text(face = "bold", size = 16))
 
 dev.off()
+```
+
+```{r, echo=FALSE, out.width='100%'}
+knitr::include_graphics("/mnt/data/barry/projects/Schroeter_Pcinnamomi/PcEffector/Latesecretedplot.png")
 ```
 
 ## Session information
