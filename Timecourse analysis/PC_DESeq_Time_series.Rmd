@@ -5,30 +5,35 @@ output:
     df_print: paged
 ---
 
-#BiocManager::install(version = '3.17')
-#if (!require("BiocManager", quietly = TRUE))
-#    install.packages("BiocManager")
-#BiocManager::install("TCseq")
-#BiocManager::install("edgeR")
-
-## Load Libraries
-
 ```{r message=FALSE, warning=FALSE, include=FALSE, paged.print=TRUE}
-suppressPackageStartupMessages({c(
-library(WGCNA),
-library(DESeq2),
-library(GEOquery),
-library(tidyverse),
-library(gridExtra),
-library(reshape2),
-library(rtracklayer),
-library(dplyr),
-library(TCseq),
-library(edgeR),
-library(SummarizedExperiment),
-library(ggplot2),
-library(grid),
-library(Cairo))})
+
+library(DESeq2)
+library(GEOquery)
+library(tidyverse)
+library(gridExtra)
+library(reshape2)
+library(rtracklayer)
+library(dplyr)
+library(TCseq)
+library(edgeR)
+library(SummarizedExperiment)
+library(ggplot2)
+library(grid)
+library(clusterProfiler)
+library("kableExtra")
+
+```
+
+```{r, include=FALSE}
+setwd("../shared_scripts/")
+
+source("../shared_scripts/pcinnamomi_annotations.R", 
+       local = knitr::knit_global())
+source("../shared_scripts/sample_names.R", 
+       local = knitr::knit_global())
+source("../shared_scripts/countmatrix.R", 
+       local = knitr::knit_global())
+
 ```
 
 get locus tag and length for RPKM 
@@ -37,7 +42,7 @@ pc.gtf <- rtracklayer::import("https://ftp.ncbi.nlm.nih.gov/genomes/genbank/prot
 pc.df <- as.data.frame((pc.gtf))
 
 pc.genes <- filter(pc.df, type == "transcript")
-pc.geneids <- select(pc.genes, seqnames, start, end, gene_id)  
+pc.geneids <- dplyr::select(pc.genes, seqnames, start, end, gene_id)  
 
 pc.annotations <- pc.geneids %>% 
   distinct(gene_id, .keep_all = T)
@@ -55,7 +60,6 @@ is.numeric(gene.len)
 head(gene.len)
 #write.table(pcannot, file = "pcgeneids.tsv",quote=FALSE,sep="\t")
 ```
-
 
 Assemble count matrix and coldata file
 
@@ -106,22 +110,10 @@ colData <- coldata %>%
 rownames(colData) <- colData$Sample
 colData <- colData [ ,-1] 
 colnames(colData) <- c("sampleid", "treatment", "timepoint", "stage", "group")
-colData <- select(colData, c(sampleid, timepoint, group))  
+colData <- dplyr::select(colData, c(sampleid, timepoint, group))  
 
 head(colData)
 ```
-
-```{r}
-#create data frame of experiment design: 4 time points and 2 replicates for each time point.
-d <- data.frame(sampleID = 1:8, group = rep(c(1, 2, 3, 4), 2),
-timepoint = rep(c('0h', '24h', '48h', '72h'), 2))
-
-d <- data.frame(sampleID = 1:12, group = rep(c(1, 2, 3, 4), 3),
-timepoint = rep(c('0h', '18h', '30h', '48h'), 3))
-head(d)
-```
-
-
 
 ```{r}
 head(gene.len)
@@ -135,9 +127,6 @@ design <- data.frame(
   group = colData$group,
   stringsAsFactors = FALSE)
 
-
-
-
 isNumeric(gene.len)
 isNumeric(IUM83CountMatrix)
 isNumeric(design)
@@ -147,8 +136,6 @@ tca <- TCA(design = design, genomicFeature = gene.len,
 
 ```
 
-
-
 ```{r}
 tca <- DBanalysis(tca)
 tca <- DBanalysis(tca, filter.type = "raw", filter.value = 10, samplePassfilter = 3)
@@ -156,7 +143,6 @@ tca <- DBanalysis(tca, filter.type = "raw", filter.value = 10, samplePassfilter 
 DBres <- DBresult(tca, group1 = "0h", group2 = c("18h","30h","48h"))
 str(DBres, strict.width = "cut")
 ```
-
 
 ```{r}
 head(DBres$`18hvs0h`)
@@ -172,18 +158,13 @@ head(t)
 
 ```
 
-
 ```{r}
 tca <- timeclust(tca, algo = "cm", k = 6, standardize = TRUE)
 p <- timeclustplot(tca, value = "z-score(PRKM)", cols = 3)
-
-print(p)
-
 ```
 
-
 ```{r}
-# Assuming the TCA object is named 'tca'
+
 # Accessing the cluster information
 cluster_info <- tca@clusterRes@cluster
 
@@ -197,5 +178,130 @@ cluster_6_genes <- names(cluster_info[cluster_info == 6])
 
 ```
 
+```{r}
+cluster_1_genes.id <- gtf.faa.omicsbox[gtf.faa.omicsbox$gene_id %in% cluster_1_genes, ]
+cluster_2_genes.id <- gtf.faa.omicsbox[gtf.faa.omicsbox$gene_id %in% cluster_2_genes, ]
+cluster_3_genes.id <- gtf.faa.omicsbox[gtf.faa.omicsbox$gene_id %in% cluster_3_genes, ]
+cluster_4_genes.id <- gtf.faa.omicsbox[gtf.faa.omicsbox$gene_id %in% cluster_4_genes, ]
+cluster_5_genes.id <- gtf.faa.omicsbox[gtf.faa.omicsbox$gene_id %in% cluster_5_genes, ]
+cluster_6_genes.id <- gtf.faa.omicsbox[gtf.faa.omicsbox$gene_id %in% cluster_6_genes, ]
+```
 
+```{r, warning=FALSE}
+source("../shared_scripts/detected_pcgenes.R", 
+       local = knitr::knit_global())
+
+detectedgenes <- as.data.frame(rownames(assay(dds)))
+colnames(detectedgenes) <- "gene_id"
+detectedgenes.id <- dplyr::right_join(gtf.faa.omicsbox, detectedgenes, by = 'gene_id')
+```
+
+```{r}
+run_enrichment <- function(gene_set, tcasets, bg) {
+  ora_res <- as.data.frame(enricher(gene = gene_set,
+                                    universe = bg,
+                                    maxGSSize = 50000,
+                                    TERM2GENE = genesets,
+                                    pAdjustMethod = "fdr",
+                                    pvalueCutoff = 1,
+                                    qvalueCutoff = 1))
+  
+  ora_res$geneID <- NULL
+  ora_res_names <- rownames(ora_res)
+  
+  ora_res$GeneRatio <- as.character(ora_res$GeneRatio)
+  
+  gr <- as.numeric(sapply(strsplit(as.character(ora_res$GeneRatio), "/"), "[[", 1)) /
+    as.numeric(sapply(strsplit(as.character(ora_res$GeneRatio), "/"), "[[", 2))
+  
+  br <- as.numeric(sapply(strsplit(as.character(ora_res$BgRatio), "/"), "[[", 1)) /
+    as.numeric(sapply(strsplit(as.character(ora_res$BgRatio), "/"), "[[", 2))
+  
+  ora_res$es <- gr/br
+  ora_res <- ora_res[order(-ora_res$es), ]
+  ora_res$Description <- NULL
+  
+  top_20 <- head(ora_res[ora_res$p.adjust < 0.05, ], 20)
+  
+  return(top_20)
+}
+
+# Define the sets and bg dataframes
+bg <- detectedgenes.id$gene_id
+
+bg.set <- data.frame("background", bg)
+colnames(bg.set) <- c("term", "gene")
+
+cluster1.set <- data.frame("Cluster1", cluster_1_genes.id$gene_id)
+colnames(cluster1.set) <- c("term", "gene")
+
+cluster2.set <- data.frame("Cluster2", cluster_2_genes.id$gene_id)
+colnames(cluster2.set) <- c("term", "gene")
+
+cluster3.set <- data.frame("Cluster3", cluster_3_genes.id$gene_id)
+colnames(cluster3.set) <- c("term", "gene")
+
+cluster4.set <- data.frame("Cluster4", cluster_4_genes.id$gene_id)
+colnames(cluster4.set) <- c("term", "gene")
+
+cluster5.set <- data.frame("Cluster5", cluster_5_genes.id$gene_id)
+colnames(cluster5.set) <- c("term", "gene")
+
+cluster6.set <- data.frame("Cluster6", cluster_6_genes.id$gene_id)
+colnames(cluster6.set) <- c("term", "gene")
+
+tcasets <- rbind(bg.set, cluster1.set, cluster2.set, cluster3.set, cluster4.set, cluster6.set, cluster6.set)
+
+genesets <- GOgenesets
+bg <- detectedgenes.id$gene_id
+
+GOc1 <- run_enrichment(cluster_1_genes, genesets, bg) 
+rownames(GOc1) <- NULL
+GOc2 <- run_enrichment(cluster_2_genes, genesets, bg)
+rownames(GOc2) <- NULL
+GOc3 <- run_enrichment(cluster_3_genes, genesets, bg)
+rownames(GOc3) <- NULL
+GOc4 <- run_enrichment(cluster_4_genes, genesets, bg)
+rownames(GOc4) <- NULL
+GOc5 <- run_enrichment(cluster_5_genes, genesets, bg)
+rownames(GOc5) <- NULL
+GOc6 <- run_enrichment(cluster_6_genes, genesets, bg)
+rownames(GOc6) <- NULL
+
+```
+
+```{r}
+print(p[[1]])
+GOc1 %>% kbl(caption="GO terms associated with Cluster 1") %>%   kable_paper("hover", full_width = F)
+```
+
+
+```{r}
+print(p[[2]])
+GOc2 %>% kbl(caption="GO terms associated with Cluster 2") %>%   kable_paper("hover", full_width = F)
+```
+
+
+```{r}
+print(p[[3]])
+GOc3 %>% kbl(caption="GO terms associated with Cluster 3") %>%   kable_paper("hover", full_width = F)
+```
+
+
+```{r}
+print(p[[4]])
+GOc4 %>% kbl(caption="GO terms associated with Cluster 4") %>%   kable_paper("hover", full_width = F)
+```
+
+
+```{r}
+print(p[[5]])
+GOc5 %>% kbl(caption="GO terms associated with Cluster 5") %>%   kable_paper("hover", full_width = F)
+```
+
+
+```{r}
+print(p[[6]])
+GOc6 %>% kbl(caption="GO terms associated with Cluster 6") %>%   kable_paper("hover", full_width = F)
+```
 
