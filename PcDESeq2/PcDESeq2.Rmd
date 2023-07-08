@@ -7,7 +7,6 @@ output: html_document
 
 ```{r, load libraries, include=FALSE}
 library("kableExtra")
-library(WGCNA)
 library(DESeq2)
 library(GEOquery)
 library(tidyverse)
@@ -24,44 +23,16 @@ library("eulerr")
 
 Upload files
 
-```{r}
-coldata <- read.table('sample_info.tsv')
-Pcgenenames <- read.table('pcgeneids.tsv', row.names = 1, quote = "", sep='\t', fill = TRUE, header = TRUE)
-IUM83Tanjilcountmatrix <- read.table('countmatrix.tsv') 
+```{r, include=FALSE}
+setwd("../shared_scripts")
 
-```
-
-Clean countmatrix for P. cinnamomi analysis
-
-```{r}
-collabels <- colnames(IUM83Tanjilcountmatrix) <- (coldata$Sample)
-colnames(IUM83Tanjilcountmatrix) <- collabels
-
-IUM83Tanjilcountmatrix <- tibble::rownames_to_column(IUM83Tanjilcountmatrix, "gene_id")
-
-IUM83CountMatrix <- IUM83Tanjilcountmatrix %>% 
-  filter(str_detect(gene_id, "IUM83")) 
-  
-rownames(IUM83CountMatrix) <- IUM83CountMatrix$gene_id
-IUM83CountMatrix <- IUM83CountMatrix [ ,-1]
-IUM83CountMatrix <- as.data.frame(IUM83CountMatrix)
-IUM83CountMatrix <- IUM83CountMatrix[ ,-(1:12)]
-
-head(IUM83CountMatrix)
-#write.table(IUM83CountMatrix, file = "Pc_countmatrix.tsv",quote=FALSE,sep="\t")
-```
-```{r}
-summary(IUM83CountMatrix)
-par(mar = c(8, 4, 4, 1) + 0.1)
-barplot(colSums(IUM83CountMatrix)/1e6, las = 3)
-
-```
-
-
-```{r}
-IUM83LogCountMatrix <- log2(1+IUM83CountMatrix)
-
-hist(IUM83LogCountMatrix, br = 100)
+#import raw files
+source("../shared_scripts/pcinnamomi_annotations.R", 
+       local = knitr::knit_global())
+source("../shared_scripts/sample_names.R", 
+       local = knitr::knit_global())
+source("../shared_scripts/countmatrix.R", 
+       local = knitr::knit_global())
 
 ```
 
@@ -142,6 +113,7 @@ pheatmap(sampleDistMatrix,
          col = colors)
 
 ```
+
 ```{r}
 
 PCA <- plotPCA(rld, c("timepoint", "sampleNames"), returnData = TRUE)
@@ -240,63 +212,8 @@ dds <- DESeq(dds)
 as.data.frame(colData(dds))
 ```
 
-```{r}
-# To compare "Early" vs "Vegetative"
-res_early_vs_vegetative <- results(dds, contrast = c("condition", "18h", "0h"))
-
-# Arrange the results by p-value
-res_early_vs_vegetative <- res_early_vs_vegetative[order(res_early_vs_vegetative$pvalue), ]
-summary(res_early_vs_vegetative)
-res_early_vs_vegetative
-
-eup <- rownames(subset(res_early_vs_vegetative, log2FoldChange > 2 & padj < 0.05))
-edn <- rownames(subset(res_early_vs_vegetative, log2FoldChange < 2 & padj < 0.05))
-
-# Print the number of upregulated and downregulated genes
-str(eup)
-str(edn)
-
-# MA plot
-sig <- subset(res_early_vs_vegetative, padj < 0.05)
-GENESUP <- length(eup)
-GENESDN <- length(edn)
-SUBHEADER <- paste(GENESUP, "up, ", GENESDN, "down")
-
-# Create the MA plot
-plot(log2(res_early_vs_vegetative$baseMean), res_early_vs_vegetative$log2FoldChange,
-     xlab = "log2 basemean", ylab = "log2 foldchange",
-     pch = 19, cex = 0.5, col = "dark gray",
-     main = "smear plot")
-points(log2(sig$baseMean), sig$log2FoldChange,
-       pch = 19, cex = 0.5, col = "blue")
-mtext(SUBHEADER)
-```
-
-```{r, Top 50 most significant genes based on p-value - Early}
- 
-top_genes <- head(res_early_vs_vegetative[order(res_early_vs_vegetative$pvalue), ], 50)
-
-# Extract the expression values for the top genes
-top_gene_expression <- assay(dds)[rownames(top_genes), ]
-
-# Create a matrix of log2-transformed expression values
-log2_expression <- log2(top_gene_expression + 1)
-
-# Extract the expression values for the top genes and select columns 1 to 6
-top_gene_expression_early <- top_gene_expression[, 1:6]
-
-# Create a matrix of log2-transformed expression values
-log2_expression_early <- log2(top_gene_expression_early + 1)
-
-filename <- "Early_pheatmap.png"
-width <- 4800 
-height <- 4800
-pointsize <- 10
-resolution <- 600
-
-png(filename, width = width, height = height, pointsize = pointsize, res = resolution)
-
-col_ann <- colData[,c(1,4)]
+```{r, pheatmap annotation}
+col_ann <- colData[,c(1,3)]
 rownames(col_ann) <- col_ann$Sample
 col_ann <- data.frame(col_ann)
 col_ann$Stage <- as.factor(col_ann$Stage)
@@ -304,81 +221,140 @@ col_ann <- col_ann[order(col_ann$Stage),]
 col_ann$sample_ID <- NULL
 head(col_ann, 12)
 
-pheatmap(top_gene_expression_early,  scale = "row",
-         cluster_rows = TRUE, cluster_cols = T,
+```
+
+```{r, Early summary}
+res_early_vs_vegetative <- results(dds, contrast = c("condition", "18h", "0h"))
+summary(res_early_vs_vegetative)
+(res_early_vs_vegetative)
+```
+
+```{r, Top 50 most significant genes based on p-value - Early}
+top_genes_early <- head(res_early_vs_vegetative[order(res_early_vs_vegetative$pvalue), ], 50)
+
+top_gene_expression_early.id <- as.data.frame(top_genes_early)
+top_gene_expression_early.id$gene_id <- rownames(top_gene_expression_early.id)
+top_gene_expression_early.id <- dplyr::right_join(pc.annotations, top_gene_expression_early.id, by = 'gene_id') %>%
+  arrange(padj)
+
+# Extract the expression values for the top genes
+top_gene_expression_early <- assay(dds)[rownames(top_genes_early), ]
+
+# Extract the expression values for the top genes and select columns 1 to 6
+top_gene_expression_early <- top_gene_expression_early[, 1:6]
+
+# Create a matrix of log2-transformed expression values
+log2_expression_early <- log2(top_gene_expression_early + 1)
+
+png(filename = "Early_pheatmap-scaledl2fc.png", width = 4800, height = 4800, pointsize = 10, res = 600)
+
+pheatmap(top_gene_expression_early, scale = "row",
+         cluster_rows = T, cluster_cols = T,
          display_numbers = F, 
          fontsize_row = 8, fontsize_col = 8, 
          annotation_col = col_ann,
          show_colnames = FALSE,
          cellheight = 8, cellwidth = 40,
-         main = "Early interaction")
+         main = "Top 50 Genes by p-value (Early)")
 
 dev.off()
 
 ```
 
+```{r, Early volcano}
+# early DE 
+ede <- as.data.frame(res_early_vs_vegetative[order(res_early_vs_vegetative$padj), ])
+# early significant 
+edesig <- subset(ede, padj < 0.05)
+
+edeup_dn <- subset(ede, (log2FoldChange > 2 | log2FoldChange < -2) & padj < 0.05)
+
+edeup <- rownames(subset(ede, log2FoldChange > 2 & padj < 0.05))
+ededn <- rownames(subset(ede, log2FoldChange < -2 & padj < 0.05))
+# Calculate the gene counts
+EDEUP <- length(edeup)
+EDEDN <- length(ededn)
+
+earlygenesDE <- head(top_gene_expression_early.id[order(top_gene_expression_early.id$pvalue), ], 10)
+earlygenesDE <- earlygenesDE$gene_id
+
+# Create the subtitle using the gene counts
+SUBHEADER <- paste(EDEUP, "Up-regulated genes ,", EDEDN, " Down-regulated genes")
+
+evol_df <- data.frame(
+  padj = ede$padj,
+  log2FoldChange = ede$log2FoldChange,
+  baseMean = ede$baseMean,
+  gene_id = rownames(ede)
+  )
+etop_genes <- head(evol_df[order(evol_df$padj), ], 50)
+
+png(filename = "EarlyDEvolcano.png", width = 4800, height = 4800, pointsize = 10, res = 600)
+
+ggplot(evol_df, aes(x = log2FoldChange, y = -log10(padj))) +
+  geom_point(color = "black", alpha = 0.5, size = 2, shape = 19) +
+  geom_point(data = edesig, aes(color = "grey"), size = 2, shape = 19) +
+  geom_point(data = edeup_dn, aes(color = "significantly expressed"), size = 2, shape = 19) +
+  geom_text(data = subset(etop_genes, baseMean > 1000), aes(label = gene_id),
+         hjust = -0.1, vjust = 0.1, color = "black", size = 3, angle = -45) +
+         labs(x = "log2foldchange", y = "log10 p-value") +
+  scale_color_manual(values = c("significantly expressed" = "turquoise"),
+                     name = "") +
+  theme_bw() +
+  theme(axis.line = element_line(color = "black"),
+        panel.border = element_rect(color = "black"),
+        panel.grid.major = element_line(color = "grey"),  
+        panel.grid.minor = element_blank(),
+        legend.position = c(0.05, 0.99),  
+        legend.justification = c(0, 1),  
+        legend.background = element_rect(fill = NA, size = 0.5),
+        legend.key.size = unit(1, "lines")) +
+  ggtitle(expression(paste(italic("Phytophthora cinnamomi"), " gene expression during early interaction"))) +
+  labs(subtitle = SUBHEADER) +
+  theme(plot.title = element_text(face = "bold", size = 16)) 
+
+dev.off()
+```
+
 ```{r}
+knitr::include_graphics("../PcDESeq2/Early_pheatmap-scaledl2fc.png")
+top_gene_expression_early.id %>% kbl(caption="Top 50 Genes by p-value (Late)") %>%   kable_paper("hover", full_width = T)
+knitr::include_graphics("../PcDESeq2/EarlyDEvolcano.png")
+```
+
+
+
+```{r}
+
+```
+
+```{r, Middle summary}
 # To compare "Middle" vs "Vegetative"
 res_middle_vs_vegetative <- results(dds, contrast =c ("condition", "30h", "0h"))
 summary(res_middle_vs_vegetative)
 res_middle_vs_vegetative
- 
-mup <- rownames(subset(res_middle_vs_vegetative, log2FoldChange > 1 & padj < 0.05))
-mdn <- rownames(subset(res_middle_vs_vegetative, log2FoldChange < 1 & padj < 0.05))
-
-# Print the number of upregulated and downregulated genes
-str(mup)
-str(mdn)
-
-# MA plot
-sig <- subset(res_middle_vs_vegetative, padj < 0.05)
-GENESUP <- length(mup)
-GENESDN <- length(mdn)
-SUBHEADER <- paste(GENESUP, "up, ", GENESDN, "down")
-
-# Create the MA plot
-plot(log2(res_middle_vs_vegetative$baseMean), res_middle_vs_vegetative$log2FoldChange,
-     xlab = "log2 basemean", ylab = "log2 foldchange",
-     pch = 19, cex = 0.5, col = "dark gray",
-     main = "smear plot")
-points(log2(sig$baseMean), sig$log2FoldChange,
-       pch = 19, cex = 0.5, col = "green")
-mtext(SUBHEADER)
 ```
 
 ```{r, Top 50 most significant genes based on p-value - Middle}
+top_genes_mid <- head(res_middle_vs_vegetative[order(res_middle_vs_vegetative$pvalue), ], 50)
 
-top_genes <- head(res_middle_vs_vegetative[order(res_middle_vs_vegetative$pvalue), ], 50)
+top_gene_expression_mid.id <- as.data.frame(top_genes_mid)
+top_gene_expression_mid.id$gene_id <- rownames(top_gene_expression_mid.id)
+top_gene_expression_mid.id <- dplyr::right_join(pc.annotations, top_gene_expression_mid.id, by = 'gene_id') %>%
+  arrange(padj)
 
 # Extract the expression values for the top genes
-top_gene_expression <- assay(dds)[rownames(top_genes), ]
-
-# Create a matrix of log2-transformed expression values
-log2_expression <- log2(top_gene_expression + 1)
+top_gene_expression <- assay(dds)[rownames(top_genes_mid), ]
 
 # Extract the expression values for the top genes and the selected columns (1 to 3 and 7 to 9)
-top_gene_expression_middle <- assay(dds)[rownames(top_genes), c(1:3, 7:9)]
+top_gene_expression_mid <- assay(dds)[rownames(top_genes_mid), c(1:3, 7:9)]
 
 # Create a matrix of log2-transformed expression values
-log2_expression_middle <- log2(top_gene_expression_middle + 1)
+log2_expression_mid <- log2(top_gene_expression_mid + 1)
 
-filename <- "Mid_pheatmap.png"
-width <- 4800 
-height <- 4800
-pointsize <- 10
-resolution <- 600
+png(filename = "Mid_pheatmap-scaledl2fc.png", width = 4800, height = 4800, pointsize = 10, res = 600)
 
-png(filename, width = width, height = height, pointsize = pointsize, res = resolution)
-
-col_ann <- colData[,c(1,4)]
-rownames(col_ann) <- col_ann$Sample
-col_ann <- data.frame(col_ann)
-col_ann$Stage <- as.factor(col_ann$Stage)
-col_ann <- col_ann[order(col_ann$Stage),]
-col_ann$sample_ID <- NULL
-head(col_ann, 12)
-
-pheatmap(log2_expression_middle,  scale = "row",
+pheatmap(log2_expression_mid,  scale = "row",
          cluster_rows = TRUE, cluster_cols = T,
          display_numbers = F, 
          fontsize_row = 8, fontsize_col = 8, 
@@ -391,61 +367,93 @@ dev.off()
 ```
 
 ```{r}
+
+```
+
+```{r, middle volcano}
+# late DE 
+mde <- as.data.frame(res_middle_vs_vegetative[order(res_middle_vs_vegetative$padj), ])
+# late significant 
+mdesig <- subset(mde, padj < 0.05)
+
+mdeup_dn <- subset(mde, (log2FoldChange > 2 | log2FoldChange < -2) & padj < 0.05)
+
+mdeup <- rownames(subset(mde, log2FoldChange > 2 & padj < 0.05))
+mdedn <- rownames(subset(mde, log2FoldChange < -2 & padj < 0.05))
+# Calculate the gene counts
+MDEUP <- length(mdeup)
+MDEDN <- length(mdedn)
+
+midgenesDE <- head(top_gene_expression_mid.id[order(top_gene_expression_mid.id$pvalue), ], 10)
+midgenesDE <- midgenesDE$gene_id
+# Create the subtitle using the gene counts
+SUBHEADER <- paste(MDEUP, "Up-regulated genes ,", MDEDN, " Down-regulated genes")
+
+mvol_df <- data.frame(
+  padj = mde$padj,
+  log2FoldChange = mde$log2FoldChange,
+  baseMean = mde$baseMean,
+  gene_id = rownames(mde)
+  )
+mtop_genes <- head(mvol_df[order(mvol_df$padj), ], 50)
+
+png(filename = "MidDEvolcano.png", width = 4800, height = 4800, pointsize = 10, res = 600)
+
+ggplot(mvol_df, aes(x = log2FoldChange, y = -log10(padj))) +
+  geom_point(color = "black", alpha = 0.5, size = 2, shape = 19) +
+  geom_point(data = mdesig, aes(color = "detected"), size = 2, shape = 19) +
+  geom_point(data = mdeup_dn, aes(color = "significantly expressed"), size = 2, shape = 19) +
+  geom_text(data = subset(mtop_genes, baseMean > 1000), aes(label = gene_id),
+         hjust = -0.1, vjust = 0.1, color = "black", size = 3, angle = -45) +
+         labs(x = "log2foldchange", y = "log10 p-value") +
+  scale_color_manual(values = c("significantly expressed" = "turquoise"),
+                     name = "") +
+  theme_bw() +
+  theme(axis.line = element_line(color = "black"),
+        panel.border = element_rect(color = "black"),
+        panel.grid.major = element_line(color = "grey"),  
+        panel.grid.minor = element_blank(),
+        legend.position = c(0.05, 0.99),  
+        legend.justification = c(0, 1),  
+        legend.background = element_rect(fill = NA, size = 0.5),
+        legend.key.size = unit(1, "lines")) +
+  ggtitle(expression(paste(italic("Phytophthora cinnamomi"), " gene expression during mid interaction"))) +
+  labs(subtitle = SUBHEADER) +
+  theme(plot.title = element_text(face = "bold", size = 16)) 
+
+dev.off()
+```
+
+```{r}
+knitr::include_graphics("../PcDESeq2/Mid_pheatmap-scaledl2fc.png")
+top_gene_expression_early.id %>% kbl(caption="Top 50 Genes by p-value (Late)") %>%   kable_paper("hover", full_width = F)
+knitr::include_graphics("../PcDESeq2/MidDEvolcano.png")
+```
+
+```{r, late summary}
 # To compare "Late" vs "Vegetative"
 res_late_vs_vegetative <- results(dds, contrast = c("condition", "48h", "0h"))
 summary(res_late_vs_vegetative)
 (res_late_vs_vegetative)
-
-lup <- rownames(subset(res_late_vs_vegetative, log2FoldChange > 2 & padj < 0.05))
-ldn <- rownames(subset(res_late_vs_vegetative, log2FoldChange < 2 & padj < 0.05))
-
-# Print the number of upregulated and downregulated genes
-str(lup)
-str(ldn)
-
-# MA plot
-sig <- subset(res_late_vs_vegetative, padj < 0.05)
-GENESUP <- length(lup)
-GENESDN <- length(ldn)
-SUBHEADER <- paste(GENESUP, "up, ", GENESDN, "down")
-
-# Create the MA plot
-plot(log2(res_late_vs_vegetative$baseMean), res_late_vs_vegetative$log2FoldChange,
-     xlab = "log2 basemean", ylab = "log2 foldchange",
-     pch = 19, cex = 0.5, col = "dark gray",
-     main = "smear plot")
-points(log2(sig$baseMean), sig$log2FoldChange,
-       pch = 19, cex = 0.5, col = "blue")
-mtext(SUBHEADER)
 ```
 
-```{r}
-# Get the top 50 most significant genes based on p-value
-top_genes <- head(res_late_vs_vegetative[order(res_late_vs_vegetative$pvalue), ], 50)
+```{r, late top 50 most significant genes based on p-value }
+top_genes_late <- head(res_late_vs_vegetative[order(res_late_vs_vegetative$pvalue), ], 50)
+
+top_gene_expression_late.id <- as.data.frame(top_genes_late)
+top_gene_expression_late.id$gene_id <- rownames(top_gene_expression_late.id)
+top_gene_expression_late.id <- dplyr::right_join(pc.annotations, top_gene_expression_late.id, by = 'gene_id') %>%
+  arrange(padj)
 
 # Extract the expression values for the top genes and the selected columns (1 to 3 and 10 to 12)
-top_gene_expression_late <- assay(dds)[rownames(top_genes), c(1:3, 10:12)]
+top_gene_expression_late <- assay(dds)[rownames(top_genes_late), c(1:3, 10:12)]
 
 # Create a matrix of log2-transformed expression values
 log2_expression_late <- log2(top_gene_expression_late + 1)
 
-col_ann <- colData[,c(1,4)]
-rownames(col_ann) <- col_ann$Sample
-col_ann <- data.frame(col_ann)
-col_ann$Stage <- as.factor(col_ann$Stage)
-col_ann <- col_ann[order(col_ann$Stage),]
-col_ann$sample_ID <- NULL
-head(col_ann, 12)
+png(filename = "Late_pheatmap-scaledl2fc.png", width = 4800, height = 4800, pointsize = 10, res = 600)
 
-#filename <- "Late_pheatmap.png"
-#width <- 4800 
-#height <- 4800
-#pointsize <- 10
-#resolution <- 600
-
-png(filename = "Late_pheatmap.png", width = 4800, height = 4800, pointsize = 10, res = 600)
-
-pheatmap(log2_expression_late,  scale = "row",
+pheatmap(log2_expression_late, scale = "row",
          cluster_rows = TRUE, cluster_cols = T,
          display_numbers = F, 
          fontsize_row = 8, fontsize_col = 8, 
@@ -457,428 +465,72 @@ pheatmap(log2_expression_late,  scale = "row",
 dev.off()
 ```
 
-        
+```{r, late volcano}
+# late DE 
+lde <- as.data.frame(res_late_vs_vegetative[order(res_late_vs_vegetative$padj), ])
+# late significant 
+ldesig <- subset(lde, padj < 0.05)
 
+ldeup_dn <- subset(lde, (log2FoldChange > 2 | log2FoldChange < -2) & padj < 0.05)
 
+ldeup <- rownames(subset(lde, log2FoldChange > 2 & padj < 0.05))
+ldedn <- rownames(subset(lde, log2FoldChange < -2 & padj < 0.05))
+# Calculate the gene counts
+LDEUP <- length(ldeup)
+LDEDN <- length(ldedn)
 
-```{r, Mitch input}
-earlymitch <- as.data.frame(res_early_vs_vegetative)
-midmitch <- as.data.frame(res_middle_vs_vegetative)
-latemitch <- as.data.frame(res_late_vs_vegetative)
+lategenesDE <- head(top_gene_expression_late.id[order(top_gene_expression_late.id$pvalue), ], 10)
+lategenesDE <- lategenesDE$gene_id
 
-#save(earlymitch, midmitch, latemitch, file = "PcMitch.RData")
-```
+# Create the subtitle using the gene counts
+SUBHEADER <- paste(LDEUP, "Up-regulated genes ,", LDEDN, " Down-regulated genes")
 
-### 
-PcEFFECTOR analysis
-###
+lvol_df <- data.frame(
+  padj = lde$padj,
+  log2FoldChange = lde$log2FoldChange,
+  baseMean = lde$baseMean,
+  gene_id = rownames(lde)
+  )
+ltop_genes <- head(lvol_df[order(lvol_df$padj), ], 50)
 
-```{r, Effector input}
-#save detected genes to export to PcEffector.Rmd
-detectedgenes <- results(dds)
-detectedgenes <- as.data.frame(detectedgenes)
-#save(detectedgenes, file = "Pceffetor.RData")
+png(filename = "LateDEvolcano.png", width = 4800, height = 4800, pointsize = 10, res = 600)
 
-```
-
-```{r}
-#import the results to use in MA plots
-load("/mnt/data/barry/projects/Schroeter_Pcinnamomi/PcEffector/secrete.effect.RData")
-```
-
-```{r, secretome expression}
-earlydetected <- as.data.frame(res_early_vs_vegetative)
-earlydetected$gene_id <- rownames(earlydetected)
-earlysecreted <- dplyr::right_join(earlydetected, pts.id, by = 'gene_id')
-
-middetected <- as.data.frame(res_middle_vs_vegetative)
-middetected$gene_id <- rownames(middetected)
-midsecreted <- dplyr::right_join(middetected, pts.id, by = 'gene_id')
-
-latedetected <- as.data.frame(res_late_vs_vegetative)
-latedetected$gene_id <- rownames(latedetected)
-latesecreted <- dplyr::right_join(latedetected, pts.id, by = 'gene_id')
-
-```
-
-```{r, secretome eulerr plot}
-
-eeup <- unique(earlysecreted[earlysecreted$log2FoldChange > 0 & earlysecreted$padj < 0.05, ])
-eeup <- eeup$gene_id
-eedn <- unique(earlysecreted[earlysecreted$log2FoldChange < 0 & earlysecreted$padj < 0.05, ])
-eedn <- eedn$gene_id
-
-meup <- unique(midsecreted[midsecreted$log2FoldChange > 0 & midsecreted$padj < 0.05, ])
-meup <- meup$gene_id
-medn <- unique(midsecreted[midsecreted$log2FoldChange < 0 & midsecreted$padj < 0.05, ])
-medn <- medn$gene_id
-
-leup <- unique(latesecreted[latesecreted$log2FoldChange > 0 & latesecreted$padj < 0.05, ])
-leup <- leup$gene_id
-ledn <- unique(latesecreted[latesecreted$log2FoldChange < 0 & latesecreted$padj < 0.05, ])
-ledn <- ledn$gene_id
-
-
-v1 <- list("Earlyup"=eeup, "Earlydn"=eedn, "Midup"=meup, "Middn"=medn, "Lateup"=leup,"Latedn"=ledn)
-
-plot(euler(v1),labels = list(cex=2),quantities = list(cex=2), main="Predicted secterome expression")
-```
-
-```{r, effector expression}
-earlydetected <- as.data.frame(res_early_vs_vegetative)
-earlydetected$gene_id <- rownames(earlydetected)
-earlysecreted <- dplyr::right_join(earlydetected, predictedeffectors2.id, by = 'gene_id')
-
-middetected <- as.data.frame(res_middle_vs_vegetative)
-middetected$gene_id <- rownames(middetected)
-midsecreted <- dplyr::right_join(middetected, predictedeffectors2.id, by = 'gene_id')
-
-latedetected <- as.data.frame(res_late_vs_vegetative)
-latedetected$gene_id <- rownames(latedetected)
-latesecreted <- dplyr::right_join(latedetected, predictedeffectors2.id, by = 'gene_id')
-
-```
-
-```{r, effector eulerr plot}
-
-eeup <- unique(earlysecreted[earlysecreted$log2FoldChange > 0 & earlysecreted$padj < 0.05, ])
-eeup <- eeup$gene_id
-eedn <- unique(earlysecreted[earlysecreted$log2FoldChange < 0 & earlysecreted$padj < 0.05, ])
-eedn <- eedn$gene_id
-
-meup <- unique(midsecreted[midsecreted$log2FoldChange > 0 & midsecreted$padj < 0.05, ])
-meup <- meup$gene_id
-medn <- unique(midsecreted[midsecreted$log2FoldChange < 0 & midsecreted$padj < 0.05, ])
-medn <- medn$gene_id
-
-leup <- unique(latesecreted[latesecreted$log2FoldChange > 0 & latesecreted$padj < 0.05, ])
-leup <- leup$gene_id
-ledn <- unique(latesecreted[latesecreted$log2FoldChange < 0 & latesecreted$padj < 0.05, ])
-ledn <- ledn$gene_id
-
-v1 <- list("Earlyup"=eeup, "Earlydn"=eedn, "Midup"=meup, "Middn"=medn, "Lateup"=leup,"Latedn"=ledn)
-
-plot(euler(v1),labels = list(cex=2),quantities = list(cex=2), main="Predicted secretome expression")
-```
-
-
-```{r, effector ORA}
-apop <- predictedeffectors2.id[grep("Y", predictedeffectors2.id$Apoplastic_effector),]
-apop.set <- data.frame("Apoplastic", apop$gene_id)
-colnames(apop.set) <- c("term", "gene")
-
-cyto <- predictedeffectors2.id[grep("Y", predictedeffectors2.id$Cytoplasmic_effector),]
-cyto.set <- data.frame("Cytosolic", cyto$gene_id) 
-colnames(cyto.set) <- c("term", "gene")
-
-all.set <- data.frame("All_effectors", predictedeffectors2.id$gene_id)
-colnames(all.set) <- c("term", "gene")
-
-bg <- allgenes$gene_id
-bg.set <- data.frame("background", bg)
-colnames(bg.set) <- c("term", "gene")
-
-sets <- rbind(apop.set, cyto.set, all.set, bg.set)
-
-intup <- intersect(intersect(eeup, meup), leup)
-esdup <- setdiff(eeup, intup)
-intdn <- intersect(intersect(eedn, medn), ledn)
-```
-
-```{r}
-ora_res <- as.data.frame(enricher(gene = intup,
-                                    universe = bg,
-                                    maxGSSize = 50000,
-                                    TERM2GENE = sets,
-                                    pAdjustMethod = "fdr",
-                                    pvalueCutoff = 1,
-                                    qvalueCutoff = 1))
-
-ora_res$geneID <- NULL
-  ora_res_names <- rownames(ora_res)
-  
-  ora_res$GeneRatio <- as.character(ora_res$GeneRatio)
-  
-  gr <- as.numeric(sapply(strsplit(as.character(ora_res$GeneRatio), "/"), "[[", 1)) /
-    as.numeric(sapply(strsplit(as.character(ora_res$GeneRatio), "/"), "[[", 2))
-  
-  br <- as.numeric(sapply(strsplit(as.character(ora_res$BgRatio), "/"), "[[", 1)) /
-    as.numeric(sapply(strsplit(as.character(ora_res$BgRatio), "/"), "[[", 2))
-  
-  ora_res$es <- gr/br
-  ora_res <- ora_res[order(-ora_res$es), ]
-  ora_res$Description <- NULL
-  
-view(ora_res)  
-```
-
-```{r}
-# Create the MA plot
-plot(log2(res_early_vs_vegetative$baseMean), res_early_vs_vegetative$log2FoldChange,
-     xlab = "log2 basemean", ylab = "log2 foldchange",
-     pch = 19, cex = 0.5, col = "dark gray",
-     main = "Early")
-points(log2(sig$baseMean), sig$log2FoldChange,
-       pch = 19, cex = 0.5, col = "blue")
-
-
-mtext(SUBHEADER)  
-```
-
-```{r,volc1}
-# Set the filename for the PNG file
-filename <- "Early_smear_plot.png"
-
-plot(res_early_vs_vegetative$log2FoldChange, -log10(res_early_vs_vegetative$padj),
-     xlab = "log2foldchange", ylab = "log10 p-value",
-     pch = 19, cex = 0.5, col = "dark gray",
-     main = "smear plot")
-points(sig$log2FoldChange, -log10(sig$padj),
-       pch = 19, cex = 0.5, col = "red")
-points(earlysecreted$log2FoldChange, -log10(earlysecreted$padj),
-       pch = 19, cex = 0.5, col = "blue")
-points(eeffector$log2FoldChange, -log10(eeffector$padj),
-       pch = 19, cex = 0.5, col = "green")
-mtext(SUBHEADER) 
+ggplot(lvol_df, aes(x = log2FoldChange, y = -log10(padj))) +
+  geom_point(color = "black", alpha = 0.5, size = 2, shape = 19) +
+  geom_point(data = ldesig, aes(color = "grey"), size = 2, shape = 19) +
+  geom_point(data = ldeup_dn, aes(color = "significantly expressed"), size = 2, shape = 19) +
+  geom_text(data = subset(ltop_genes, baseMean > 1000), aes(label = gene_id),
+         hjust = -0.1, vjust = 0.1, color = "black", size = 3, angle = -45) +
+         labs(x = "log2foldchange", y = "log10 p-value") +
+  scale_color_manual(values = c("significantly expressed" = "turquoise"),
+                     name = "") +
+  theme_bw() +
+  theme(axis.line = element_line(color = "black"),
+        panel.border = element_rect(color = "black"),
+        panel.grid.major = element_line(color = "grey"),  
+        panel.grid.minor = element_blank(),
+        legend.position = c(0.05, 0.99),  
+        legend.justification = c(0, 1),  
+        legend.background = element_rect(fill = NA, size = 0.5),
+        legend.key.size = unit(1, "lines")) +
+  ggtitle(expression(paste(italic("Phytophthora cinnamomi"), " gene expression during late interaction"))) +
+  labs(subtitle = SUBHEADER) +
+  theme(plot.title = element_text(face = "bold", size = 16)) 
 
 dev.off()
 ```
 
 ```{r}
-middetected <- as.data.frame(res_middle_vs_vegetative)
-middetected$gene_id <- rownames(middetected)
-
-midsecreted <- dplyr::right_join(middetected, effectorp.results.id, by = 'gene_id')
-
-meffector <- subset(midsecreted, !Prediction %in% "Non-effector")
-
-res_mid_secreted <- midsecreted[order(midsecreted$pvalue), ]
-
-mup <- rownames(subset(res_middle_vs_vegetative, log2FoldChange > 2 & padj < 0.05))
-mdn <- rownames(subset(res_middle_vs_vegetative, log2FoldChange < 2 & padj < 0.05))
-
-meup <- rownames(subset(meffector, log2FoldChange > 2 & padj < 0.05))
-medn <- rownames(subset(meffector, log2FoldChange < 2 & padj < 0.05))
-# Print the number of upregulated and downregulated genes
-str(mup)
-str(mdn)
-str(meup)
-str(medn)
-
-
-msig <- subset(res_middle_vs_vegetative, padj < 0.05)
-MGENESUP <- length(mup)
-MGENESDN <- length(mdn)
-MSUBHEADER <- paste("Mid", MGENESUP, "up, ", MGENESDN, "down")
-
-
-# Create the MA plot
-plot(log2(res_middle_vs_vegetative$baseMean), res_middle_vs_vegetative$log2FoldChange,
-     xlab = "log2 basemean", ylab = "log2 foldchange",
-     pch = 19, cex = 0.5, col = "dark gray",
-     main = "smear plot")
-points(log2(msig$baseMean), msig$log2FoldChange,
-       pch = 19, cex = 0.5, col = "red")
-points(log2(midsecreted$baseMean), midsecreted$log2FoldChange,
-       pch = 19, cex = 0.5, col = "blue")
-points(log2(meffector$baseMean), meffector$log2FoldChange,
-       pch = 19, cex = 0.5, col = "green")
-mtext(MSUBHEADER)
-```
-
-```{r,volc2}
-# Set the filename for the PNG file
-filename <- "Mid_smear_plot.png"
-
-# Create a PNG device
-png(filename)
-plot(res_middle_vs_vegetative$log2FoldChange, -log10(res_middle_vs_vegetative$padj),
-     xlab = "log2foldchange", ylab = "log10 p-value",
-     pch = 19, cex = 0.5, col = "dark gray",
-     main = "smear plot")
-points(msig$log2FoldChange, -log10(msig$padj),
-       pch = 19, cex = 0.5, col = "red")
-points(midsecreted$log2FoldChange, -log10(midsecreted$padj),
-       pch = 19, cex = 0.5, col = "blue")
-points(meffector$log2FoldChange, -log10(meffector$padj),
-       pch = 19, cex = 0.5, col = "green")
-mtext(MSUBHEADER)
-
-dev.off()
+knitr::include_graphics("../PcDESeq2/Late_pheatmap-scaledl2fc.png")
+top_gene_expression_late.id %>% kbl(caption="Top 50 Genes by p-value (Late)") %>%   kable_paper("hover", full_width = T)
+knitr::include_graphics("../PcDESeq2/LateDEvolcano.png")
 ```
 
 
-```{r}
-latedetected <- as.data.frame(res_late_vs_vegetative)
-latedetected$gene_id <- rownames(latedetected)
-
-latesecreted <- dplyr::right_join(latedetected, effectorp.results.id, by = 'gene_id')
-
-leffector <- subset(latesecreted, !Prediction %in% "Non-effector")
 
 
-res_late_secreted <- latesecreted[order(latesecreted$pvalue), ]
-
-lup <- rownames(subset(res_late_vs_vegetative, log2FoldChange > 2 & padj < 0.05))
-ldn <- rownames(subset(res_late_vs_vegetative, log2FoldChange < 2 & padj < 0.05))
-
-leup <- rownames(subset(leffector, log2FoldChange > 2 & padj < 0.05))
-ledn <- rownames(subset(leffector, log2FoldChange < 2 & padj < 0.05))
-
-# Print the number of upregulated and downregulated genes
-str(lup)
-str(ldn)
-
-lsig <- subset(res_late_vs_vegetative, padj < 0.05)
-LGENESUP <- length(lup)
-LGENESDN <- length(ldn)
-LSUBHEADER <- paste("Late", LGENESUP, "up, ", LGENESDN, "down")
 
 
-# Create the MA plot
-plot(log2(res_late_vs_vegetative$baseMean), res_late_vs_vegetative$log2FoldChange,
-     xlab = "log2 basemean", ylab = "log2 foldchange",
-     pch = 19, cex = 0.5, col = "dark gray",
-     main = "smear plot")
-points(log2(lsig$baseMean), lsig$log2FoldChange,
-       pch = 19, cex = 0.5, col = "red")
-points(log2(latesecreted$baseMean), latesecreted$log2FoldChange,
-       pch = 19, cex = 0.5, col = "blue")
-points(log2(leffector$baseMean), leffector$log2FoldChange,
-       pch = 19, cex = 0.5, col = "green")
-mtext(LSUBHEADER)
-```
-
-```{r}
-# Set the filename for the PNG file
-filename <- "Late_smear_plot.png"
-
-# Create a PNG device
-png(filename)
-
-# Generate the plot
-plot(res_late_vs_vegetative$log2FoldChange, -log10(res_late_vs_vegetative$padj),
-     xlab = "log2foldchange", ylab = "log10 p-value",
-     pch = 19, cex = 0.5, col = "dark gray",
-     main = "smear plot")
-points(lsig$log2FoldChange, -log10(lsig$padj),
-       pch = 19, cex = 0.5, col = "red")
-points(latesecreted$log2FoldChange, -log10(latesecreted$padj),
-       pch = 19, cex = 0.5, col = "blue")
-mtext("Late")
-
-# Close the PNG device
-dev.off()
-```
-
-```{r, combined volcano}
-
-# Set the filename for the PNG file
-filename <- "combinedvolcano_plots.png"
-
-# Create a PNG device for the combined plot
-png(filename)
-
-width <- 10  # Adjust the width as desired
-height <- 6  # Adjust the height as desired
-
-# Create a PNG device for the combined plot with increased dimensions
-png(filename, width = width, height = height, units = "in", res = 300)
-
-
-# Set the layout for the plots (1 row, 3 columns)
-par(mfrow = c(1, 3))
-
-plot(res_early_vs_vegetative$log2FoldChange, -log10(res_early_vs_vegetative$padj),
-     xlab = "log2foldchange", ylab = "log10 p-value",
-     pch = 19, cex = 0.5, col = "dark gray",
-     main = "smear plot")
-points(sig$log2FoldChange, -log10(sig$padj),
-       pch = 19, cex = 0.5, col = "red")
-points(earlysecreted$log2FoldChange, -log10(earlysecreted$padj),
-       pch = 19, cex = 0.5, col = "blue")
-points(eeffector$log2FoldChange, -log10(eeffector$padj),
-       pch = 19, cex = 0.5, col = "black")
-mtext("Early")
-
-plot(res_middle_vs_vegetative$log2FoldChange, -log10(res_middle_vs_vegetative$padj),
-     xlab = "log2foldchange", ylab = "log10 p-value",
-     pch = 19, cex = 0.5, col = "dark gray",
-     main = "smear plot")
-points(msig$log2FoldChange, -log10(msig$padj),
-       pch = 19, cex = 0.5, col = "red")
-points(midsecreted$log2FoldChange, -log10(midsecreted$padj),
-       pch = 19, cex = 0.5, col = "blue")
-points(meffector$log2FoldChange, -log10(meffector$padj),
-       pch = 19, cex = 0.5, col = "black")
-mtext("Mid")
-
-plot(res_late_vs_vegetative$log2FoldChange, -log10(res_late_vs_vegetative$padj),
-     xlab = "log2foldchange", ylab = "log10 p-value",
-     pch = 19, cex = 0.5, col = "dark gray",
-     main = "smear plot")
-points(lsig$log2FoldChange, -log10(lsig$padj),
-       pch = 19, cex = 0.5, col = "red")
-points(latesecreted$log2FoldChange, -log10(latesecreted$padj),
-       pch = 19, cex = 0.5, col = "blue")
-points(leffector$log2FoldChange, -log10(leffector$padj),
-       pch = 19, cex = 0.5, col = "black")
-mtext("Late")
-
-# Close the PNG device
-dev.off()
-```
-
-```{r}
-# Set the filename for the PNG file
-filename <- "combinedMA_plots.png"
-
-# Create a PNG device for the combined plot
-png(filename)
-
-width <- 10  # Adjust the width as desired
-height <- 6  # Adjust the height as desired
-
-# Create a PNG device for the combined plot with increased dimensions
-png(filename, width = width, height = height, units = "in", res = 300)
-
-# Set the layout for the plots (1 row, 3 columns)
-par(mfrow = c(1, 3))
-
-plot(log2(res_early_vs_vegetative$baseMean), res_early_vs_vegetative$log2FoldChange,
-     xlab = "log2 basemean", ylab = "log2 foldchange",
-     pch = 19, cex = 0.5, col = "dark gray",
-     main = "smear plot")
-points(log2(sig$baseMean), sig$log2FoldChange,
-       pch = 19, cex = 0.5, col = "red")
-points(log2(earlysecreted$baseMean), earlysecreted$log2FoldChange,
-       pch = 19, cex = 0.5, col = "blue")
-mtext(SUBHEADER)
-
-plot(log2(res_middle_vs_vegetative$baseMean), res_middle_vs_vegetative$log2FoldChange,
-     xlab = "log2 basemean", ylab = "log2 foldchange",
-     pch = 19, cex = 0.5, col = "dark gray",
-     main = "smear plot")
-points(log2(msig$baseMean), msig$log2FoldChange,
-       pch = 19, cex = 0.5, col = "red")
-points(log2(midsecreted$baseMean), midsecreted$log2FoldChange,
-       pch = 19, cex = 0.5, col = "blue")
-mtext(MSUBHEADER)
-
-plot(log2(res_late_vs_vegetative$baseMean), res_late_vs_vegetative$log2FoldChange,
-     xlab = "log2 basemean", ylab = "log2 foldchange",
-     pch = 19, cex = 0.5, col = "dark gray",
-     main = "smear plot")
-points(log2(lsig$baseMean), lsig$log2FoldChange,
-       pch = 19, cex = 0.5, col = "red")
-points(log2(latesecreted$baseMean), latesecreted$log2FoldChange,
-       pch = 19, cex = 0.5, col = "blue")
-points(leffector$log2FoldChange, -log10(leffector$padj),
-       pch = 19, cex = 0.5, col = "green")
-mtext(LSUBHEADER)
-
-dev.off()
-```
 
 ## Session information
 
