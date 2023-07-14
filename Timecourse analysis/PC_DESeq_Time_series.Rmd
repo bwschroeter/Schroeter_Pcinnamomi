@@ -1,6 +1,7 @@
 ---
 title: "Pc time course analysis"
 output:
+  word_document: default
   html_document:
     df_print: paged
 ---
@@ -20,7 +21,8 @@ library(SummarizedExperiment)
 library(ggplot2)
 library(grid)
 library(clusterProfiler)
-library("kableExtra")
+#library("kableExtra")
+library(patchwork)
 
 ```
 
@@ -165,6 +167,28 @@ p <- timeclustplot(tca, value = "z-score(PRKM)", cols = 3)
 
 ```{r}
 
+combined_plot <- wrap_plots(p[[1]], p[[2]], p[[3]], p[[4]], p[[5]], p[[6]], nrow = 2)
+
+```
+
+```{r}
+
+png(filename = "../Figures/PcTCA.png", width = 13800, height = 4800, pointsize = 10, res = 600)
+print(combined_plot)
+dev.off()
+
+```
+
+
+```{r}
+knitr::include_graphics("../Figures/PcTCA.png")
+```
+
+
+
+
+```{r}
+
 # Accessing the cluster information
 cluster_info <- tca@clusterRes@cluster
 
@@ -185,6 +209,92 @@ cluster_3_genes.id <- gtf.faa.omicsbox[gtf.faa.omicsbox$gene_id %in% cluster_3_g
 cluster_4_genes.id <- gtf.faa.omicsbox[gtf.faa.omicsbox$gene_id %in% cluster_4_genes, ]
 cluster_5_genes.id <- gtf.faa.omicsbox[gtf.faa.omicsbox$gene_id %in% cluster_5_genes, ]
 cluster_6_genes.id <- gtf.faa.omicsbox[gtf.faa.omicsbox$gene_id %in% cluster_6_genes, ]
+```
+
+```{r}
+write_fasta_clusters <- function(df, cluster_number, file_path) {
+  num_sequences <- nrow(df)
+  sequences_per_file <- 400
+
+  # Calculate the number of files needed
+  num_files <- ceiling(num_sequences / sequences_per_file)
+
+  # Create the output directory if it doesn't exist
+  dir.create(dirname(file_path), recursive = TRUE, showWarnings = FALSE)
+
+  # Split the dataframe into chunks of size sequences_per_file
+  sequence_chunks <- split(df, ceiling(seq_along(df$protein_id) / sequences_per_file))
+
+  # Define a function to write a sequence chunk to a file with cluster labels
+  write_chunk <- function(chunk, cluster_num, chunk_num) {
+    cluster_label <- paste0("cluster_", cluster_num, ".", chunk_num)
+    chunk_file_path <- file.path(dirname(file_path), paste0(cluster_label, ".fasta"))
+    fasta_string <- paste0(">", chunk$protein_id, "\n", chunk$Sequence, "\n")
+    writeLines(fasta_string, con = chunk_file_path)
+  }
+
+  # Use mapply to write each sequence chunk to a separate file with cluster labels
+  mapply(write_chunk, sequence_chunks, cluster_number, seq_along(sequence_chunks))
+}
+```
+
+```{r}
+
+cluster_1_genes.id <- gtf.faa.omicsbox[gtf.faa.omicsbox$gene_id %in% cluster_1_genes, ]
+write_fasta_clusters(cluster_1_genes.id, 1, "/mnt/data/barry/projects/Schroeter_Pcinnamomi/Timecourse analysis/TCAseq_Fasta/cluster_output.fasta")
+cluster_2_genes.id <- gtf.faa.omicsbox[gtf.faa.omicsbox$gene_id %in% cluster_2_genes, ]
+write_fasta_clusters(cluster_2_genes.id, 2, "/mnt/data/barry/projects/Schroeter_Pcinnamomi/Timecourse analysis/TCAseq_Fasta/cluster_output.fasta")
+cluster_3_genes.id <- gtf.faa.omicsbox[gtf.faa.omicsbox$gene_id %in% cluster_3_genes, ]
+write_fasta_clusters(cluster_3_genes.id, 3, "/mnt/data/barry/projects/Schroeter_Pcinnamomi/Timecourse analysis/TCAseq_Fasta/cluster_output.fasta")
+cluster_4_genes.id <- gtf.faa.omicsbox[gtf.faa.omicsbox$gene_id %in% cluster_4_genes, ]
+write_fasta_clusters(cluster_4_genes.id, 4, "/mnt/data/barry/projects/Schroeter_Pcinnamomi/Timecourse analysis/TCAseq_Fasta/cluster_output.fasta")
+cluster_5_genes.id <- gtf.faa.omicsbox[gtf.faa.omicsbox$gene_id %in% cluster_5_genes, ]
+write_fasta_clusters(cluster_5_genes.id, 5, "/mnt/data/barry/projects/Schroeter_Pcinnamomi/Timecourse analysis/TCAseq_Fasta/cluster_output.fasta")
+cluster_6_genes.id <- gtf.faa.omicsbox[gtf.faa.omicsbox$gene_id %in% cluster_6_genes, ]
+write_fasta_clusters(cluster_6_genes.id, 6, "/mnt/data/barry/projects/Schroeter_Pcinnamomi/Timecourse analysis/TCAseq_Fasta/cluster_output.fasta")
+
+
+```
+
+run on PHIB-BLAST http://phi-blast.phi-base.org/
+use function to chunck clusters into 400 .fasta sequences as to not break their server
+check  PHI-base 4.15 protein sequences
+use the flags -evalue 1.0e-5 -num_alignments 20
+
+
+
+
+```{r}
+# Set the file path to your .tsv file
+file_path <- "/mnt/data/barry/projects/Schroeter_Pcinnamomi/Timecourse analysis/PHIBLAST_results/1.1PHI-BLAST-std_tsv_report.tsv"
+
+# Read the .tsv file into a data frame, excluding rows containing "# "
+data <- read.delim(file_path, sep = "\t", header = FALSE)
+data <- data[!grepl("# ", data$V1), , drop = FALSE]
+
+# Create a new data frame to store the transformed data
+transformed_data <- data.frame(matrix(ncol = 12, nrow = nrow(data) / 12, byrow = TRUE), row.names = NULL)
+
+# Assign the values to the respective columns in the transformed data
+transformed_data$protein_id <- data$V1[seq(1, nrow(data), 12)]
+transformed_data$subject_id <- data$V1[seq(2, nrow(data), 12)]
+transformed_data$percent_identity <- as.numeric(data$V1[seq(3, nrow(data), 12)])
+transformed_data$alignment_length <- as.numeric(data$V1[seq(4, nrow(data), 12)])
+transformed_data$mismatches <- as.numeric(data$V1[seq(5, nrow(data), 12)])
+transformed_data$gap_opens <- as.numeric(data$V1[seq(6, nrow(data), 12)])
+transformed_data$q_start <- as.numeric(data$V1[seq(7, nrow(data), 12)])
+transformed_data$q_end <- as.numeric(data$V1[seq(8, nrow(data), 12)])
+transformed_data$s_start <- as.numeric(data$V1[seq(9, nrow(data), 12)])
+transformed_data$s_end <- as.numeric(data$V1[seq(10, nrow(data), 12)])
+transformed_data$evalue <- data$V1[seq(11, nrow(data), 12)]
+transformed_data$bit_score <- as.numeric(data$V1[seq(12, nrow(data), 12)])
+
+transformed_data <- transformed_data[, -(1:12)]
+transformed_data.id <- dplyr::right_join(gtf.omicsbox, transformed_data, by = 'protein_id')
+phiunique <- as.data.frame(unique(transformed_data$protein_id)) 
+names(phiunique)[1] <- "protein_id"
+
+phiunique.id <- dplyr::right_join(gtf.faa.omicsbox, phiunique, by = 'protein_id')
 ```
 
 ```{r, warning=FALSE}
@@ -271,37 +381,195 @@ rownames(GOc6) <- NULL
 ```
 
 ```{r}
-print(p[[1]])
-GOc1 %>% kbl(caption="GO terms associated with Cluster 1") %>%   kable_paper("hover", full_width = F)
+dataframes <- list(GOc1, GOc2, GOc3, GOc4, GOc5, GOc6)
+
+# Add cluster information to each dataframe using lapply
+combined_data <- lapply(1:length(dataframes), function(i) {
+  cluster <- paste("Cluster", i)
+  data <- dataframes[[i]]
+  data$Cluster <- cluster
+  data
+})
+
+# Combine the dataframes into a single dataframe
+combined_dataframe <- do.call(rbind, combined_data)
+
+# Print the combined dataframe
+print(combined_dataframe)
+```
+
+```{r, fig.height=30, fig.width=50}
+# Sort the combined_dataframe by cluster and -log10(p-adjusted)
+sorted_dataframe <- combined_dataframe[order(combined_dataframe$Cluster, -log10(combined_dataframe$p.adjust)), ]
+
+# Create a color palette with different gradients for each cluster
+num_clusters <- length(unique(sorted_dataframe$Cluster))
+color_palette <- brewer.pal(num_clusters, "GnBu")
+
+# Assign different colors to each cluster
+cluster_colors <- color_palette[as.numeric(factor(sorted_dataframe$Cluster))]
+
+# Create the transposed bar chart with different gradients for each cluster
+plot <- barplot(-log10(sorted_dataframe$p.adjust), horiz = TRUE, 
+                xlab = "-log10(p-adjusted)", ylab = "", 
+                col = cluster_colors, border = NA)
+
+# Add y-axis with row names
+axis(2, at = plot, labels = sorted_dataframe$ID, las = 1, cex.axis = 0.8)
+
+# Add a label for the y-axis
+mtext("ID", side = 2, line = 2, cex = 0.8)
+
+# Adjust plot margins to make space for row labels
+par(mar = c(5, 8, 4, 2) + 0.1)
+
+```
+
+```{r, fig.height=30, fig.width=50}
+
+# Sort the combined_dataframe by cluster and -log10(p-adjusted)
+sorted_dataframe <- combined_dataframe[order(combined_dataframe$Cluster, -log10(combined_dataframe$p.adjust)), ]
+
+# Create a color palette with different gradients for each cluster
+num_clusters <- length(unique(sorted_dataframe$Cluster))
+color_palette <- brewer.pal(num_clusters, "Spectral")
+
+# Create the horizontal bar plot with different gradients for each cluster using ggplot2
+plot <- ggplot(sorted_dataframe, aes(x = -log10(p.adjust), y = reorder(ID, -log10(p.adjust)), fill = Cluster)) +
+  geom_bar(stat = "identity", orientation = "y") +
+  labs(title = "", x = "-log10(p-adjusted)", y = "") +
+  scale_fill_manual(values = color_palette) +
+  theme_minimal() +
+  theme(axis.title.y = element_text(angle = 0, hjust = 1))
+
+# Display the plot
+plot
+
+
+```
+
+```{r, fig.height=30, fig.width=50}
+library(ggplot2)
+library(RColorBrewer)
+
+# Sort the combined_dataframe by cluster and -log10(p-adjusted)
+sorted_dataframe <- combined_dataframe[order(combined_dataframe$Cluster, -log10(combined_dataframe$p.adjust)), ]
+
+# Create a color palette with different gradients for each cluster
+num_clusters <- length(unique(sorted_dataframe$Cluster))
+color_palette <- brewer.pal(num_clusters, "Spectral")
+
+png(filename = "PcTCA_GO.png", width = 13800, height = 6400, pointsize = 10, res = 600)
+# Create the horizontal bar plot with different gradients for each cluster using ggplot2
+plot <- ggplot(sorted_dataframe, aes(x = -log10(p.adjust), y = reorder(ID, -log10(p.adjust)), fill = Cluster)) +
+  geom_bar(stat = "identity", orientation = "y") +
+  labs(title = "", x = "-log10(p-adjusted)", y = "") +
+  scale_fill_manual(values = color_palette) +
+  theme_minimal() +
+  theme(axis.title.y = element_text(angle = 0, hjust = 1, size = 12), 
+        axis.text.y = element_text(size = 12, margin = margin(r = 0)),
+        legend.text = element_text(size = 12),
+        axis.text.x = element_text(size = 12),  
+        axis.line.x = element_line(size = 1),
+        legend.title = element_text(size = 12),
+        axis.title.x = element_text(size = 20)  
+        )
+
+plot
+dev.off()
+
+```
+```{r}
+knitr::include_graphics("../Timecourse analysis/PcTCA_GO.png")
+```
+
+```{r, fig.height=30, fig.width=50}
+BP_dataframe <- combined_dataframe[grep(' P ', combined_dataframe$ID), ]
+
+# Sort the filtered dataframe by cluster and -log10(p-adjusted)
+BP_dataframe <- BP_dataframe[order(BP_dataframe$Cluster, -log10(BP_dataframe$p.adjust)), ]
+
+# Create a color palette with different gradients for each cluster
+num_clusters <- length(unique(BP_dataframe$Cluster))
+color_palette <- brewer.pal(num_clusters, "Spectral")
+
+png(filename = "PcTCA_BP.png", width = 13800, height = 4800, pointsize = 10, res = 600)
+
+# Create the horizontal bar plot with different gradients for each cluster using ggplot2
+plot <- ggplot(BP_dataframe, aes(x = -log10(p.adjust), y = reorder(ID, -log10(p.adjust)), fill = Cluster)) +
+  geom_bar(stat = "identity", orientation = "y") +
+  labs(title = "", x = "-log10(p-adjusted)", y = "") +
+  scale_fill_manual(values = color_palette) +
+  theme_minimal() +
+  theme(axis.title.y = element_text(angle = 0, hjust = 1, size = 12), 
+        axis.text.y = element_text(size = 16, margin = margin(r = 0)),
+        legend.text = element_text(size = 16),
+        legend.title = element_text(size = 0),
+        axis.text.x = element_text(size = 16),
+        axis.line.x = element_line(size = 1),
+        axis.title.x = element_text(size = 20)
+        )
+print(plot)
+dev.off()
 ```
 
 
 ```{r}
+knitr::include_graphics("../Timecourse analysis/PcTCA_BP.png")
+```
+```{r}
+png(filename = "PcTCAandBP.png", width = 13800, height = 6400, pointsize = 10, res = 600)
+combined_plot2 <- wrap_plots(combined_plot, plot,  nrow = 2)
+combined_plot2
+dev.off()
+```
+
+```{r}
+
+png(filename = "../Figures/PcTCA.png", width = 13800, height = 6400, pointsize = 10, res = 600)
+print(combined_plot)
+dev.off()
+
+```
+
+
+```{r}
+knitr::include_graphics("../Figures/PcTCA.png")
+```
+
+
+
+```{r}
+print(p[[1]])
+#GOc1 %>% kbl(caption="GO terms associated with Cluster 1") %>%   kable_paper("hover", full_width = F)
+```
+
+```{r}
 print(p[[2]])
-GOc2 %>% kbl(caption="GO terms associated with Cluster 2") %>%   kable_paper("hover", full_width = F)
+#GOc2 %>% kbl(caption="GO terms associated with Cluster 2") %>%   kable_paper("hover", full_width = F)
 ```
 
 
 ```{r}
 print(p[[3]])
-GOc3 %>% kbl(caption="GO terms associated with Cluster 3") %>%   kable_paper("hover", full_width = F)
+#GOc3 %>% kbl(caption="GO terms associated with Cluster 3") %>%   kable_paper("hover", full_width = F)
 ```
 
 
 ```{r}
 print(p[[4]])
-GOc4 %>% kbl(caption="GO terms associated with Cluster 4") %>%   kable_paper("hover", full_width = F)
+#GOc4 %>% kbl(caption="GO terms associated with Cluster 4") %>%   kable_paper("hover", full_width = F)
 ```
 
 
 ```{r}
 print(p[[5]])
-GOc5 %>% kbl(caption="GO terms associated with Cluster 5") %>%   kable_paper("hover", full_width = F)
+#GOc5 %>% kbl(caption="GO terms associated with Cluster 5") %>%   kable_paper("hover", full_width = F)
 ```
 
 
 ```{r}
 print(p[[6]])
-GOc6 %>% kbl(caption="GO terms associated with Cluster 6") %>%   kable_paper("hover", full_width = F)
+#GOc6 %>% kbl(caption="GO terms associated with Cluster 6") %>%   kable_paper("hover", full_width = F)
 ```
 
