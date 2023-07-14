@@ -2,7 +2,9 @@
 title: "Chapter 3:Effector analysis"
 author: "BWSchroeter"
 date: "2023-06-23"
-output: html_document
+output:
+  word_document: default
+  html_document: default
 ---
  
 ```{r, libs, message=FALSE, warning=FALSE}
@@ -15,7 +17,7 @@ library(edgeR)
 library(data.table)
 library(clusterProfiler)
 library(ggplot2)
-library("kableExtra")
+#library("kableExtra")
 library("eulerr")
 library(pheatmap)
 ```
@@ -787,12 +789,12 @@ rownames(GOledn) <- NULL
 ```
 
 ```{r}
-GOeeup %>% kbl(caption="GO terms Early upregulated secreted") %>%   kable_paper("hover", full_width = F)
-GOeedn %>% kbl(caption="GO terms Early downregulated secreted") %>%   kable_paper("hover", full_width = F)
-GOmeup %>% kbl(caption="GO terms Mid upregulated secreted") %>%   kable_paper("hover", full_width = F)
-GOmedn %>% kbl(caption="GO terms Mid downregulated secreted") %>%   kable_paper("hover", full_width = F)
-GOleup %>% kbl(caption="GO terms Late upregulated secreted") %>%   kable_paper("hover", full_width = F)
-GOledn %>% kbl(caption="GO terms Late downregulated secreted") %>%   kable_paper("hover", full_width = F)
+#GOeeup %>% kbl(caption="GO terms Early upregulated secreted") %>%   kable_paper("hover", full_width = F)
+#GOeedn %>% kbl(caption="GO terms Early downregulated secreted") %>%   kable_paper("hover", full_width = F)
+#GOmeup %>% kbl(caption="GO terms Mid upregulated secreted") %>%   kable_paper("hover", full_width = F)
+#GOmedn %>% kbl(caption="GO terms Mid downregulated secreted") %>%   kable_paper("hover", full_width = F)
+#GOleup %>% kbl(caption="GO terms Late upregulated secreted") %>%   kable_paper("hover", full_width = F)
+#GOledn %>% kbl(caption="GO terms Late downregulated secreted") %>%   kable_paper("hover", full_width = F)
 ```
 
 ```{r, early secreted smear}
