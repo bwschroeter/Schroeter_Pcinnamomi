@@ -2,11 +2,13 @@
 title: "PcDESeq2"
 author: "BWSchroeter"
 date: "2023-05-22"
-output: html_document
+output:
+  word_document: default
+  html_document: default
 ---
 
 ```{r, load libraries, include=FALSE}
-library("kableExtra")
+#library("kableExtra")
 library(DESeq2)
 library(GEOquery)
 library(tidyverse)
@@ -19,6 +21,9 @@ library(clusterProfiler)
 library(pheatmap)
 library(RColorBrewer)
 library("eulerr")
+library(officer)
+library(flextable)
+
 ```
 
 Upload files
@@ -128,12 +133,12 @@ ggplot(PCA, aes(PC1, PC2, color = condition)) +
   theme_bw() +
   theme(axis.line = element_line(color = "black"),
         panel.border = element_rect(color = "black"),
-        panel.grid.major = element_line(color = "grey"),  # Set the color of major grid lines to grey
+        panel.grid.major = element_line(color = "grey"),  
         panel.grid.minor = element_blank(),
-        legend.position = c(0.05, 0.40),  # Set the position of the legend (top-left corner)
-        legend.justification = c(0, 1),  # Set the justification of the legend (top-left corner)
-        legend.background = element_rect(color = "black", fill = "white", size = 0.5),  # Add a black border around the legend box and make it white
-        legend.key.size = unit(1, "lines"))  # Increase the size of the legend key
+        legend.position = c(0.05, 0.40),  
+        legend.justification = c(0, 1),  
+        legend.background = element_rect(color = "black", fill = "white", size = 0.5),  
+        legend.key.size = unit(1, "lines"))  
 
 ```
 
@@ -177,13 +182,7 @@ ggplot(PCA, aes(PC1, PC2, color = condition)) +
 
 ```{r}
 
-filename <- "PCA_vst.png"
-png(filename)
-
-width <- 10  
-height <- 6  
-
-png(filename, width = width, height = height, units = "in", res = 300)
+png("../Figures/PCA_vst.png", width = 10, height = 6, units = "in", res = 300)
 
 ggplot(PCA, aes(PC1, PC2, color = condition)) +
   geom_point(size = 5) +
@@ -202,6 +201,9 @@ ggplot(PCA, aes(PC1, PC2, color = condition)) +
         legend.key.size = unit(1, "lines"))  
 
 dev.off()
+```
+```{r}
+knitr::include_graphics("../Figures/PCA_vst.png")
 ```
 
 ```{r}
@@ -246,7 +248,7 @@ top_gene_expression_early <- top_gene_expression_early[, 1:6]
 # Create a matrix of log2-transformed expression values
 log2_expression_early <- log2(top_gene_expression_early + 1)
 
-png(filename = "Early_pheatmap-scaledl2fc.png", width = 4800, height = 4800, pointsize = 10, res = 600)
+png(filename = "../Figures/Early_pheatmap-scaledl2fc.png", width = 4800, height = 4800, pointsize = 10, res = 600)
 
 pheatmap(top_gene_expression_early, scale = "row",
          cluster_rows = T, cluster_cols = T,
@@ -261,7 +263,7 @@ dev.off()
 
 ```
 
-```{r, Early volcano}
+```{r, Early volcano padj}
 # early DE 
 ede <- as.data.frame(res_early_vs_vegetative[order(res_early_vs_vegetative$padj), ])
 # early significant 
@@ -275,10 +277,6 @@ ededn <- rownames(subset(ede, log2FoldChange < -2 & padj < 0.05))
 EDEUP <- length(edeup)
 EDEDN <- length(ededn)
 
-earlygenesDE <- head(top_gene_expression_early.id[order(top_gene_expression_early.id$pvalue), ], 10)
-earlygenesDE <- earlygenesDE$gene_id
-
-# Create the subtitle using the gene counts
 SUBHEADER <- paste(EDEUP, "Up-regulated genes ,", EDEDN, " Down-regulated genes")
 
 evol_df <- data.frame(
@@ -289,7 +287,94 @@ evol_df <- data.frame(
   )
 etop_genes <- head(evol_df[order(evol_df$padj), ], 50)
 
-png(filename = "EarlyDEvolcano.png", width = 4800, height = 4800, pointsize = 10, res = 600)
+png(filename = "../Figures/EarlyDEvolcano.png", width = 4800, height = 4800, pointsize = 10, res = 600)
+
+ggplot(evol_df, aes(x = log2FoldChange, y = -log10(padj))) +
+  geom_point(color = "black", alpha = 0.5, size = 2, shape = 19) +
+  geom_point(data = edesig, aes(color = "grey"), size = 2, shape = 19) +
+  geom_point(data = edeup_dn, aes(color = "significantly expressed"), size = 2, shape = 19) +
+  geom_text(data = subset(etop_genes, baseMean > 1000), aes(label = gene_id),
+         hjust = -0.1, vjust = 0.1, color = "black", size = 3, angle = -45) +
+         labs(x = "log2foldchange", y = "log10 p-value") +
+  scale_color_manual(values = c("significantly expressed" = "turquoise"),
+                     name = "") +
+  theme_bw() +
+  theme(axis.line = element_line(color = "black"),
+        panel.border = element_rect(color = "black"),
+        panel.grid.major = element_line(color = "grey"),  
+        panel.grid.minor = element_blank(),
+        legend.position = c(0.05, 0.99),  
+        legend.justification = c(0, 1),  
+        legend.background = element_rect(fill = NA, size = 0.5),
+        legend.key.size = unit(1, "lines")) +
+  ggtitle(expression(paste(italic("Phytophthora cinnamomi"), " gene expression during early interaction"))) +
+  labs(subtitle = SUBHEADER) +
+  theme(plot.title = element_text(face = "bold", size = 16)) 
+
+dev.off()
+```
+
+```{r, Top 50 most significant genes based on p-value/baseMean - Early}
+top_genes_early <- as.data.frame(res_early_vs_vegetative[order(res_early_vs_vegetative$pvalue), ])
+
+top_genes_early <- top_genes_early %>%
+  dplyr::filter(baseMean >= 1000) %>%
+  arrange(pvalue) %>%
+  head(50)
+
+top_gene_expression_early.id <- as.data.frame(top_genes_early)
+top_gene_expression_early.id$gene_id <- rownames(top_gene_expression_early.id)
+top_gene_expression_early.id <- dplyr::right_join(pc.annotations, top_gene_expression_early.id, by = 'gene_id') %>%
+  arrange(padj)
+
+# Extract the expression values for the top genes
+top_gene_expression_early <- assay(dds)[rownames(top_genes_early), ]
+
+# Extract the expression values for the top genes and select columns 1 to 6
+top_gene_expression_early <- top_gene_expression_early[, 1:6]
+
+# Create a matrix of log2-transformed expression values
+log2_expression_early <- log2(top_gene_expression_early + 1)
+
+png(filename = "../Figures/Early_pheatmap-scaledl2fc2.png", width = 4800, height = 4800, pointsize = 10, res = 600)
+
+pheatmap(top_gene_expression_early, scale = "row",
+         cluster_rows = T, cluster_cols = T,
+         display_numbers = F, 
+         fontsize_row = 8, fontsize_col = 8, 
+         annotation_col = col_ann,
+         show_colnames = FALSE,
+         cellheight = 8, cellwidth = 40,
+         main = "Top 50 Genes by p-value (Early)")
+
+dev.off()
+```
+
+```{r, Early volcano basemean}
+# early DE 
+ede <- as.data.frame(res_early_vs_vegetative[order(res_early_vs_vegetative$padj), ])
+# early significant 
+edesig <- subset(ede, padj < 0.05)
+
+edeup_dn <- subset(ede, (log2FoldChange > 2 | log2FoldChange < -2) & padj < 0.05)
+
+edeup <- rownames(subset(ede, log2FoldChange > 2 & padj < 0.05))
+ededn <- rownames(subset(ede, log2FoldChange < -2 & padj < 0.05))
+# Calculate the gene counts
+EDEUP <- length(edeup)
+EDEDN <- length(ededn)
+
+SUBHEADER <- paste(EDEUP, "Up-regulated genes ,", EDEDN, " Down-regulated genes")
+
+evol_df <- data.frame(
+  padj = ede$padj,
+  log2FoldChange = ede$log2FoldChange,
+  baseMean = ede$baseMean,
+  gene_id = rownames(ede)
+  )
+etop_genes <- head(evol_df[order(evol_df$padj), ], 10)
+
+png(filename = "../Figures/EarlyDEvolcano2.png", width = 4800, height = 4800, pointsize = 10, res = 600)
 
 ggplot(evol_df, aes(x = log2FoldChange, y = -log10(padj))) +
   geom_point(color = "black", alpha = 0.5, size = 2, shape = 19) +
@@ -317,15 +402,11 @@ dev.off()
 ```
 
 ```{r}
-knitr::include_graphics("../PcDESeq2/Early_pheatmap-scaledl2fc.png")
-top_gene_expression_early.id %>% kbl(caption="Top 50 Genes by p-value (Late)") %>%   kable_paper("hover", full_width = T)
-knitr::include_graphics("../PcDESeq2/EarlyDEvolcano.png")
-```
-
-
-
-```{r}
-
+knitr::include_graphics("../Figures/Early_pheatmap-scaledl2fc.png")
+knitr::include_graphics("../Figures/Early_pheatmap-scaledl2fcbaseMean.png")
+#top_gene_expression_early.id %>% kbl(caption="Top 50 Genes by p-value (Late)") %>%   kable_paper("hover", full_width = T)
+knitr::include_graphics("../Figures/EarlyDEvolcano.png")
+knitr::include_graphics("../Figures/EarlyDEvolcano2.png")
 ```
 
 ```{r, Middle summary}
@@ -352,7 +433,7 @@ top_gene_expression_mid <- assay(dds)[rownames(top_genes_mid), c(1:3, 7:9)]
 # Create a matrix of log2-transformed expression values
 log2_expression_mid <- log2(top_gene_expression_mid + 1)
 
-png(filename = "Mid_pheatmap-scaledl2fc.png", width = 4800, height = 4800, pointsize = 10, res = 600)
+png(filename = "../Figures/Mid_pheatmap-scaledl2fc.png", width = 4800, height = 4800, pointsize = 10, res = 600)
 
 pheatmap(log2_expression_mid,  scale = "row",
          cluster_rows = TRUE, cluster_cols = T,
@@ -364,10 +445,6 @@ pheatmap(log2_expression_mid,  scale = "row",
          main = "Top 50 Genes by p-value (Middle)")
 
 dev.off()
-```
-
-```{r}
-
 ```
 
 ```{r, middle volcano}
@@ -397,7 +474,7 @@ mvol_df <- data.frame(
   )
 mtop_genes <- head(mvol_df[order(mvol_df$padj), ], 50)
 
-png(filename = "MidDEvolcano.png", width = 4800, height = 4800, pointsize = 10, res = 600)
+png(filename = "../Figures/MidDEvolcano.png", width = 4800, height = 4800, pointsize = 10, res = 600)
 
 ggplot(mvol_df, aes(x = log2FoldChange, y = -log10(padj))) +
   geom_point(color = "black", alpha = 0.5, size = 2, shape = 19) +
@@ -425,9 +502,9 @@ dev.off()
 ```
 
 ```{r}
-knitr::include_graphics("../PcDESeq2/Mid_pheatmap-scaledl2fc.png")
-top_gene_expression_early.id %>% kbl(caption="Top 50 Genes by p-value (Late)") %>%   kable_paper("hover", full_width = F)
-knitr::include_graphics("../PcDESeq2/MidDEvolcano.png")
+knitr::include_graphics("../Figures/Mid_pheatmap-scaledl2fc.png")
+#top_gene_expression_early.id %>% kbl(caption="Top 50 Genes by p-value (Late)") %>%   kable_paper("hover", full_width = F)
+knitr::include_graphics("../Figures/MidDEvolcano.png")
 ```
 
 ```{r, late summary}
@@ -451,7 +528,7 @@ top_gene_expression_late <- assay(dds)[rownames(top_genes_late), c(1:3, 10:12)]
 # Create a matrix of log2-transformed expression values
 log2_expression_late <- log2(top_gene_expression_late + 1)
 
-png(filename = "Late_pheatmap-scaledl2fc.png", width = 4800, height = 4800, pointsize = 10, res = 600)
+png(filename = "../Figures/Late_pheatmap-scaledl2fc.png", width = 4800, height = 4800, pointsize = 10, res = 600)
 
 pheatmap(log2_expression_late, scale = "row",
          cluster_rows = TRUE, cluster_cols = T,
@@ -493,7 +570,7 @@ lvol_df <- data.frame(
   )
 ltop_genes <- head(lvol_df[order(lvol_df$padj), ], 50)
 
-png(filename = "LateDEvolcano.png", width = 4800, height = 4800, pointsize = 10, res = 600)
+png(filename = "../Figures/LateDEvolcano.png", width = 4800, height = 4800, pointsize = 10, res = 600)
 
 ggplot(lvol_df, aes(x = log2FoldChange, y = -log10(padj))) +
   geom_point(color = "black", alpha = 0.5, size = 2, shape = 19) +
@@ -521,13 +598,10 @@ dev.off()
 ```
 
 ```{r}
-knitr::include_graphics("../PcDESeq2/Late_pheatmap-scaledl2fc.png")
-top_gene_expression_late.id %>% kbl(caption="Top 50 Genes by p-value (Late)") %>%   kable_paper("hover", full_width = T)
-knitr::include_graphics("../PcDESeq2/LateDEvolcano.png")
+knitr::include_graphics("../Figures/Late_pheatmap-scaledl2fc.png")
+#top_gene_expression_late.id %>% kbl(caption="Top 50 Genes by p-value (Late)") %>%   kable_paper("hover", full_width = T)
+knitr::include_graphics("../Figures/LateDEvolcano.png")
 ```
-
-
-
 
 
 
