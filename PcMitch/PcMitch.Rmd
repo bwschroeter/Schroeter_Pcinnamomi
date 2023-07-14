@@ -33,11 +33,11 @@ latemitch2$MyGeneIDs<-rownames(latemitch2)
 rownames(latemitch2)<-seq(nrow(latemitch2))
 head(latemitch2)
 
-
 x<-list("Early"=earlymitch2,"Mid"=midmitch2, "Late"=latemitch2)
 y<-mitch_import(x,"DESeq2")
 
 ```
+
 ```{r,import6}
 # obtain vector of gene names
 genenames<-rownames(earlymitch)
@@ -60,7 +60,6 @@ latemitch2<-merge(latemitch,gt,by.x=0,by.y="genenames")
 rownames(latemitch2)<-latemitch2$accessions
 latemitch2<-latemitch2[,2:5]
 
-
 # now have a peek at the input data before importing
 head(earlymitch2,3)
 head(midmitch2,3)
@@ -75,6 +74,7 @@ head(y,3)
 # prioritisation by significance
 ressig<-mitch_calc(y,genesets,priority="significance", minsetsize = 5, cores=2)
 ```
+
 ```{r,calc2}
 # peek at the results
 head(ressig$enrichment_result)
@@ -84,6 +84,7 @@ head(ressig$enrichment_result)
 # prioritisation by effect size
 reseffect<-mitch_calc(y,genesets,priority="effect", minsetsize = 5, cores=2)
 ```
+
 ```{r,calc4}
 head(reseffect$enrichment_result)
 ```
