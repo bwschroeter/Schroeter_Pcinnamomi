@@ -239,6 +239,8 @@ top_gene_expression_early.id$gene_id <- rownames(top_gene_expression_early.id)
 top_gene_expression_early.id <- dplyr::right_join(pc.annotations, top_gene_expression_early.id, by = 'gene_id') %>%
   arrange(padj)
 
+view(top_gene_expression_early.id)
+
 # Extract the expression values for the top genes
 top_gene_expression_early <- assay(dds)[rownames(top_genes_early), ]
 
@@ -262,6 +264,8 @@ pheatmap(top_gene_expression_early, scale = "row",
 dev.off()
 
 ```
+
+
 
 ```{r, Early volcano padj}
 # early DE 
@@ -324,7 +328,7 @@ top_genes_early <- top_genes_early %>%
 
 top_gene_expression_early.id <- as.data.frame(top_genes_early)
 top_gene_expression_early.id$gene_id <- rownames(top_gene_expression_early.id)
-top_gene_expression_early.id <- dplyr::right_join(pc.annotations, top_gene_expression_early.id, by = 'gene_id') %>%
+top_gene_expression_early.id <- dplyr::right_join(gtf.omicsbox, top_gene_expression_early.id, by = 'gene_id') %>%
   arrange(padj)
 
 # Extract the expression values for the top genes
@@ -348,6 +352,44 @@ pheatmap(top_gene_expression_early, scale = "row",
          main = "Top 50 Genes by p-value (Early)")
 
 dev.off()
+```
+```{r}
+# function to save tables landscape
+sect_properties <- prop_section(
+  page_size = page_size(
+    orient = "landscape",
+    width = 8.7, height = 11.7
+  ),
+  type = "continuous",
+  page_margins = page_mar()
+)
+```
+
+```{r}
+earlydeseqtable <- head(top_gene_expression_early.id, 10)
+
+# Order columns logically 
+earlydeseqtable <- earlydeseqtable %>% 
+  dplyr::select(c(gene_id, protein_id, product, GO_terms, baseMean, log2FoldChange, padj))
+
+earlydeseqtable$baseMean <- round(earlydeseqtable$baseMean)
+earlydeseqtable$log2FoldChange <- round(earlydeseqtable$log2FoldChange, 2)
+earlydeseqtable$padj <- as.numeric(earlydeseqtable$padj)
+# Format the 'padj' column to scientific notation with two decimal places
+earlydeseqtable$padj <- sprintf("%.2e", earlydeseqtable$padj)
+
+# Rename columns 
+colnames(earlydeseqtable) <- c("Gene name", "Protein name", "Product", "GO term", "baseMean", "log2FoldChange", "padj")
+
+view(earlydeseqtable)
+
+earlydeseqtable <-  flextable(earlydeseqtable) %>%
+  theme_booktabs() %>%
+  align(align = "center", part = c("all"))
+
+print(earlydeseqtable)
+
+#save_as_docx(earlydeseqtable, path =  "/mnt/data/barry/projects/Schroeter_Pcinnamomi/sequencing_stats/earlydeseqtable.docx", pr_section = sect_properties)
 ```
 
 ```{r, Early volcano basemean}
@@ -402,11 +444,10 @@ dev.off()
 ```
 
 ```{r}
-knitr::include_graphics("../Figures/Early_pheatmap-scaledl2fc.png")
-knitr::include_graphics("../Figures/Early_pheatmap-scaledl2fcbaseMean.png")
-#top_gene_expression_early.id %>% kbl(caption="Top 50 Genes by p-value (Late)") %>%   kable_paper("hover", full_width = T)
-knitr::include_graphics("../Figures/EarlyDEvolcano.png")
-knitr::include_graphics("../Figures/EarlyDEvolcano2.png")
+#knitr::include_graphics("../Figures/Early_pheatmap-scaledl2fc.png")
+#knitr::include_graphics("../Figures/Early_pheatmap-scaledl2fcbaseMean.png")
+#knitr::include_graphics("../Figures/EarlyDEvolcano.png")
+#knitr::include_graphics("../Figures/EarlyDEvolcano2.png")
 ```
 
 ```{r, Middle summary}
@@ -421,7 +462,7 @@ top_genes_mid <- head(res_middle_vs_vegetative[order(res_middle_vs_vegetative$pv
 
 top_gene_expression_mid.id <- as.data.frame(top_genes_mid)
 top_gene_expression_mid.id$gene_id <- rownames(top_gene_expression_mid.id)
-top_gene_expression_mid.id <- dplyr::right_join(pc.annotations, top_gene_expression_mid.id, by = 'gene_id') %>%
+top_gene_expression_mid.id <- dplyr::right_join(gtf.omicsbox, top_gene_expression_mid.id, by = 'gene_id') %>%
   arrange(padj)
 
 # Extract the expression values for the top genes
@@ -502,8 +543,35 @@ dev.off()
 ```
 
 ```{r}
+middeseqtable <- head(top_gene_expression_mid.id, 10)
+
+# Order columns logically 
+middeseqtable <- middeseqtable %>% 
+  dplyr::select(c(gene_id, protein_id, product, GO_terms, baseMean, log2FoldChange, padj))
+
+middeseqtable$baseMean <- round(middeseqtable$baseMean)
+middeseqtable$log2FoldChange <- round(middeseqtable$log2FoldChange, 2)
+middeseqtable$padj <- as.numeric(middeseqtable$padj)
+# Format the 'padj' column to scientific notation with two decimal places
+middeseqtable$padj <- sprintf("%.2e", middeseqtable$padj)
+
+# Rename columns 
+colnames(middeseqtable) <- c("Gene name", "Protein name", "Product", "GO term", "baseMean", "log2FoldChange", "padj")
+
+view(middeseqtable)
+
+earlydeseqtable <-  flextable(earlydeseqtable) %>%
+  theme_booktabs() %>%
+  align(align = "center", part = c("all"))
+
+print(earlydeseqtable)
+
+#save_as_docx(earlydeseqtable, path =  "/mnt/data/barry/projects/Schroeter_Pcinnamomi/sequencing_stats/earlydeseqtable.docx", pr_section = sect_properties)
+```
+
+
+```{r}
 knitr::include_graphics("../Figures/Mid_pheatmap-scaledl2fc.png")
-#top_gene_expression_early.id %>% kbl(caption="Top 50 Genes by p-value (Late)") %>%   kable_paper("hover", full_width = F)
 knitr::include_graphics("../Figures/MidDEvolcano.png")
 ```
 
@@ -519,7 +587,7 @@ top_genes_late <- head(res_late_vs_vegetative[order(res_late_vs_vegetative$pvalu
 
 top_gene_expression_late.id <- as.data.frame(top_genes_late)
 top_gene_expression_late.id$gene_id <- rownames(top_gene_expression_late.id)
-top_gene_expression_late.id <- dplyr::right_join(pc.annotations, top_gene_expression_late.id, by = 'gene_id') %>%
+top_gene_expression_late.id <- dplyr::right_join(gtf.omicsbox, top_gene_expression_late.id, by = 'gene_id') %>%
   arrange(padj)
 
 # Extract the expression values for the top genes and the selected columns (1 to 3 and 10 to 12)
@@ -598,8 +666,34 @@ dev.off()
 ```
 
 ```{r}
+earlydeseqtable <- head(top_gene_expression_early.id, 10)
+
+# Order columns logically 
+earlydeseqtable <- earlydeseqtable %>% 
+  dplyr::select(c(gene_id, protein_id, product, GO_terms, baseMean, log2FoldChange, padj))
+
+earlydeseqtable$baseMean <- round(earlydeseqtable$baseMean)
+earlydeseqtable$log2FoldChange <- round(earlydeseqtable$log2FoldChange, 2)
+earlydeseqtable$padj <- as.numeric(earlydeseqtable$padj)
+# Format the 'padj' column to scientific notation with two decimal places
+earlydeseqtable$padj <- sprintf("%.2e", earlydeseqtable$padj)
+
+# Rename columns 
+colnames(earlydeseqtable) <- c("Gene name", "Protein name", "Product", "GO term", "baseMean", "log2FoldChange", "padj")
+
+view(earlydeseqtable)
+
+earlydeseqtable <-  flextable(earlydeseqtable) %>%
+  theme_booktabs() %>%
+  align(align = "center", part = c("all"))
+
+print(earlydeseqtable)
+
+#save_as_docx(earlydeseqtable, path =  "/mnt/data/barry/projects/Schroeter_Pcinnamomi/sequencing_stats/earlydeseqtable.docx", pr_section = sect_properties)
+```
+
+```{r}
 knitr::include_graphics("../Figures/Late_pheatmap-scaledl2fc.png")
-#top_gene_expression_late.id %>% kbl(caption="Top 50 Genes by p-value (Late)") %>%   kable_paper("hover", full_width = T)
 knitr::include_graphics("../Figures/LateDEvolcano.png")
 ```
 
