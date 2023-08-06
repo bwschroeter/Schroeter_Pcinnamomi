@@ -17,7 +17,6 @@ library(edgeR)
 library(data.table)
 library(clusterProfiler)
 library(ggplot2)
-#library("kableExtra")
 library("eulerr")
 library(pheatmap)
 ```
@@ -108,9 +107,7 @@ Ranking effector candidates according to their expression during infection with 
 
 Sperschneider, J., Gardiner, D.M., Dodds, P.N., Tini, F., Covarelli, L., Singh, K.B., Manners, J.M. and Taylor, J.M. (2016), EffectorP: predicting fungal effector proteins from secretomes using machine learning. New Phytol, 210: 743-761. https://doi.org/10.1111/nph.13794
 
-
 #SignalP analysis
-
 
 setwd("~/projects/Schroeter_Pcinnamomi/PcEffector/signalp-6.0/signalp6_fast/")
 Sys.setenv(PATH = paste("/home/barry/.local/bin", Sys.getenv("PATH"), sep = ":"))
@@ -118,7 +115,6 @@ Sys.setenv(PATH = paste("/home/barry/.local/bin", Sys.getenv("PATH"), sep = ":")
 SIGNALP_DIR <- system("python3 -c 'import signalp; import os; print(os.path.dirname(signalp.__file__))'", intern = TRUE)
 
 Sys.getenv("PATH")
-
 system("signalp6 -h")
 
 system("signalp6 --fastafile ~/projects/Schroeter_Pcinnamomi/PcEffector/Raw_fasta/allpcgenes.fasta --organism eukarya --output_dir ~/projects/Schroeter_Pcinnamomi/PcEffector/SignalPall_output --format none --mode fast")
@@ -155,6 +151,8 @@ hist(split_results$probability, main = "Signal peptide probability", xlab = "Pro
 signalPSP.filtered <- subset(signalPSP, probability >= 0.7)
 
 signalPSP.filtered.id <- dplyr::right_join(gtf.faa.omicsbox, signalPSP.filtered, by = 'protein_id')
+
+usignalPSP.filtered.id <- unique(signalPSP.filtered.id$protein_id)
 #1878/21334 proteins predicted to contain a Sec/SPI SPs using signalP6.0 
 #1694/1878 with a probability of 0.7 or greater
 ```
@@ -166,6 +164,7 @@ uniquephobius.id <- gtf.faa.omicsbox[gtf.faa.omicsbox$protein_id %in% uniquephob
 #1361 proteins with signal peptides that are not Sec/SPI SPs using phobius
 
 signalpeptides <- unique(c(phobius.id$protein_id, signalPSP.filtered$protein_id))
+
 signalpeptides.id <- gtf.faa.omicsbox[gtf.faa.omicsbox$protein_id %in% signalpeptides, ]
 #3055 peptides have a predicted signal peptide
 ```
@@ -212,6 +211,7 @@ dbcansecreted.id <- gtf.faa.omicsbox[gtf.faa.omicsbox$protein_id %in% dbcansecre
 totalsecreted <- unique(c(pts.id$protein_id, pfameffectors.id$protein_id, knowneffectors.id$protein_id, signalPSP.filtered.id$protein_id, dbcan.id$protein_id, phobius.id$protein_id, filtered_interproscanTMHMM.id$protein_id))
 
 totalsecreted.id <- gtf.faa.omicsbox[gtf.faa.omicsbox$protein_id %in% totalsecreted, ]
+
 ```
 
 ```{r, warning=FALSE}
@@ -235,13 +235,7 @@ s4 <- unique(dbcan.id$protein_id)
 s6 <- unique(phobius.id$protein_id)
 s7 <- unique(filtered_interproscanTMHMM.id$protein_id)
 
-filename <- "predictedsecretome.png"
-png(filename)
-
-width <- 10  
-height <- 6  
-
-png(filename, width = width, height = height, units = "in", res = 300)
+png("predictedsecretome.png", width = 10, height = 6, units = "in", res = 300)
 
 SECRETOME <- list("Pfam"=s1, "Genome"=s2, "SignalP"=s3, "CAZyme"=s4,"Phobius"=s6, "TMHMM"=s7)
 
@@ -249,8 +243,13 @@ plot(euler(SECRETOME),quantities = TRUE, labels = list(font = 24), main="Predict
 
 dev.off()
 ```
-```{r, echo=FALSE, out.width='100%'}
-knitr::include_graphics("/mnt/data/barry/projects/Schroeter_Pcinnamomi/PcEffector/predictedsecretome.png")
+
+```{r}
+signalPSP_protein_ids <- signalPSP.filtered.id$protein_id
+phobius_protein_ids <- phobius.id$protein_id
+
+# Find the protein IDs that are unique to the phobius.id dataframe
+unique_phobius_ids <- subset(phobius.id, !(protein_id %in% signalPSP_protein_ids))
 ```
 
 #EffectorP analysis 
@@ -270,7 +269,6 @@ system("/home/barry/.virtualenvs/my-python/bin/python EffectorP.py -i inplantase
 effectorpinplanta.output <- tail(read.delim("EffectorP_3.0.0-beta/inplantasecreted_effectorPresults.txt", sep = "\t", stringsAsFactors = FALSE), 15)
 view(effectorpinplanta.output)
 ```
-
 
 ```{r,echo=FALSE}
 effectorpinplanta.results <- read.delim("EffectorP_3.0.0-beta/inplantasecreted_effectorPresults.txt", sep = "\t", stringsAsFactors = FALSE, skip = 10)
@@ -292,6 +290,55 @@ inplantaeffectors.id <- dplyr::right_join(gtf.faa.omicsbox, inplantaeffectors, b
 # 824 effector genes in planta
 ```
 
+```{r}
+# create a dataframe that has secreted, number of tmhelices and signal peptide
+
+signalpeptides.id <- signalpeptides.id %>%
+  mutate(SP = "Yes")
+
+gtf.omicsbox.effector <-  gtf.faa.omicsbox %>%
+  left_join(signalpeptides.id %>%
+              select(protein_id, SP), by = "protein_id") %>%
+  mutate(SP = ifelse(is.na(SP), "No", SP))
+
+TMHMMcount <- interproscanresults[interproscanresults$analysis == "TMHMM",]
+
+TMHMMcount <- TMHMMcount %>%
+  group_by(protein_id) %>%
+  mutate(tmhelices = n())
+
+TMHMMcount <- TMHMMcount %>%
+  distinct(protein_id, .keep_all = TRUE)
+
+tmhelices_data <- TMHMMcount %>%
+  select(protein_id, tmhelices)
+
+gtf.omicsbox.effector <- gtf.omicsbox.effector %>%
+  left_join(tmhelices_data, by = "protein_id") 
+
+gtf.omicsbox.effector$tmhelices <- ifelse(is.na(gtf.omicsbox.effector$tmhelices), 0, gtf.omicsbox.effector$tmhelices)
+
+totalsecreted.id <- totalsecreted.id %>%
+  mutate(secreted = "Yes")
+
+gtf.omicsbox.effector <-  gtf.omicsbox.effector %>%
+  left_join(totalsecreted.id %>%
+              select(protein_id, secreted), by = "protein_id") %>%
+  mutate(secreted = ifelse(is.na(secreted), "No", secreted))
+
+gtf.omicsbox.effector <-  gtf.omicsbox.effector %>%
+  left_join(inplantasecreted %>%
+              select(protein_id, Prediction), by = "protein_id") 
+
+gtf.omicsbox.effector$Prediction <- ifelse(is.na(gtf.omicsbox.effector$Prediction), "-", gtf.omicsbox.effector$Prediction)
+
+gtf.omicsbox.effector <- gtf.omicsbox.effector %>%
+  mutate(`SP, TM` = paste(SP, tmhelices, sep = ", "))
+
+write.csv(gtf.omicsbox.effector, file = "/mnt/data/barry/projects/Schroeter_Pcinnamomi/shared_scripts/effectortable.tsv", row.names = FALSE)
+
+```
+
 ```{r, effector expression, echo=FALSE}
 
 earlydetected <- as.data.frame(res_early_vs_vegetative)
@@ -308,43 +355,54 @@ latesecreted <- dplyr::right_join(latedetected, inplantasecreted.id, by = 'gene_
 
 ```
 
-```{r, effector expression eulerr plot, echo=FALSE}
+```{r, secretome expression eulerr plot, echo=FALSE}
 
-eeup <- earlysecreted[earlysecreted$log2FoldChange > 0 & earlysecreted$padj < 0.05, ]
+eeup <- earlysecreted[earlysecreted$log2FoldChange > 2 & earlysecreted$padj < 0.05, ]
 eeup <- unique(eeup$gene_id)
-eedn <- earlysecreted[earlysecreted$log2FoldChange < 0 & earlysecreted$padj < 0.05, ]
+eedn <- earlysecreted[earlysecreted$log2FoldChange < -2 & earlysecreted$padj < 0.05, ]
 eedn <- unique(eedn$gene_id)
 
-meup <- midsecreted[midsecreted$log2FoldChange > 0 & midsecreted$padj < 0.05, ]
+meup <- midsecreted[midsecreted$log2FoldChange > 2 & midsecreted$padj < 0.05, ]
 meup <- unique(meup$gene_id)
-medn <- midsecreted[midsecreted$log2FoldChange < 0 & midsecreted$padj < 0.05, ]
+medn <- midsecreted[midsecreted$log2FoldChange < -2 & midsecreted$padj < 0.05, ]
 medn <- unique(medn$gene_id)
 
-leup <- latesecreted[latesecreted$log2FoldChange > 0 & latesecreted$padj < 0.05, ]
+leup <- latesecreted[latesecreted$log2FoldChange > 2 & latesecreted$padj < 0.05, ]
 leup <- unique(leup$gene_id)
-ledn <- latesecreted[latesecreted$log2FoldChange < 0 & latesecreted$padj < 0.05, ]
+ledn <- latesecreted[latesecreted$log2FoldChange < -2 & latesecreted$padj < 0.05, ]
 ledn <- unique(ledn$gene_id)
 
-filename <- "Effectorexpression.png"
-
-# Create a PNG device
-png(filename)
-
-width <- 10  
-height <- 6  
-
-png(filename, width = width, height = height, units = "in", res = 300)
+png("Secretomeexpressionstringent.png", width = 10, height = 6, units = "in", res = 300)
 
 secreted <- list("Early_up"=eeup, "Early_down"=eedn, "Mid_up"=meup, "Mid_down"=medn, "Late_up"=leup,"Late_down"=ledn)
 
-plot(euler(secreted),quantities = TRUE, labels = list(font = 24), main="In Planta secretome expression")
+plot(euler(secreted),quantities = TRUE, labels = list(font = 24), main="In Planta predicted secretome expression")
 
 dev.off()
 ```
 
-```{r, echo=FALSE, out.width='100%'}
-knitr::include_graphics("/mnt/data/barry/projects/Schroeter_Pcinnamomi/PcEffector/Effectorexpression.png")
+# Calculate the gene counts
+ESGENESUP <- length(essup)
+ESGENESDN <- length(essdn)
+EEGENESUP <- length(eesup)
+EEGENESDN <- length(eesdn)
+
+# Create the subtitle using the gene counts
+SUBHEADER <- paste(ESGENESUP, "Secreted genes Up-regulated (", EEGENESUP, "effectors),",
+                    ESGENESDN, "Secreted genes down-regulated (", EEGENESDN, "effectors)")
+
+```{r, secretome expression stats, echo=FALSE}
+teeup <- length(earlysecreted[earlysecreted$log2FoldChange > 0 & earlysecreted$padj < 0.05, ])
+teedn <- length(earlysecreted[earlysecreted$log2FoldChange < -0 & earlysecreted$padj < 0.05, ])
+
+tmeup <- length(midsecreted[midsecreted$log2FoldChange > 0 & midsecreted$padj < 0.05, ])
+tmedn <- length(midsecreted[midsecreted$log2FoldChange < 0 & midsecreted$padj < 0.05, ])
+
+tleup <- length(latesecreted[latesecreted$log2FoldChange > 0 & latesecreted$padj < 0.05, ])
+tledn <- length(latesecreted[latesecreted$log2FoldChange < 0 & latesecreted$padj < 0.05, ])
+
 ```
+
 
 ```{r, upregulated effector ORA, echo=FALSE}
 performEnrichmentAnalysis <- function(geneSet, sets, bg) {
@@ -423,12 +481,6 @@ rownames(dds.df) <- NULL
 ```
 
 ```{r}
-
-rxlr <- pcrxlr$gene_id
-rxlr.de <- dds.df[dds.df$gene_id %in% rxlr, ]
-rownames(rxlr.de) <- rxlr.de$gene_id
-rxlr.de$gene_id <- NULL
-
 col_ann <- colData[,c(1,3)]
 rownames(col_ann) <- col_ann$Sample
 col_ann <- data.frame(col_ann)
@@ -441,27 +493,27 @@ col_ann$Stage <- factor(col_ann$Stage, levels = c("Vegetative", "Early", "Middle
 # Sort the `col_ann` dataframe based on the ordered `Stage` column
 col_ann <- col_ann[order(col_ann$Stage), ]
 
-filename <- "RxLR_normalized.png"
-width <- 6400 
-height <- 6400
-pointsize <- 10
-resolution <- 600
+```
 
-png(filename, width = width, height = height, pointsize = pointsize, res = resolution)
 
-pheatmap(rxlr.de,  scale = "row",
+```{r}
+
+rxlr <- pcrxlr$gene_id
+rxlr.de <- dds.df[dds.df$gene_id %in% rxlr, ]
+rownames(rxlr.de) <- rxlr.de$gene_id
+rxlr.de$gene_id <- NULL
+
+png("RxLR_normalized.png", width = 6400, height = 6400, pointsize = 10, res = 600)
+
+rxlrphm <- pheatmap(rxlr.de,  scale = "row",
          cluster_rows = TRUE, cluster_cols = F,
          display_numbers = F, 
          fontsize_row = 8, fontsize_col = 8, 
          annotation_col = col_ann,
          show_colnames = FALSE,
          cellheight = 8, cellwidth = 40,
-         main = "RxLR- normalized counts")
+         main = "RxLR")
 dev.off()
-```
-
-```{r,fig.height=8, fig.width=12}
-knitr::include_graphics("/mnt/data/barry/projects/Schroeter_Pcinnamomi/PcEffector/RxLR_normalized.png")
 ```
 
 IUM83_06578 rxlr rna helicase
@@ -484,8 +536,8 @@ data_matrix <- matrix(
 rownames(data_matrix) <- rxlrede$gene_id
 colnames(data_matrix) <- c("Early", "Middle", "Late")
 
-filename <- "RxLR_Log2Fold.png"
-png(filename, width = width, height = height, pointsize = pointsize, res = resolution)
+filename <- 
+png("RxLR_Log2Fold.png", width = 6400, height = 6400, pointsize = 10, res = 600)
 
 # Create the heatmap with row labels
 pheatmap(data_matrix,
@@ -495,16 +547,14 @@ pheatmap(data_matrix,
          cluster_cols = FALSE,
          show_rownames = TRUE,
          labels_row = rxlrede$gene_id,
-         main = "RxLR - log2FoldChange")
+         main = "RxLR")
 dev.off()
 
 ```
 
-```{r}
-knitr::include_graphics("/mnt/data/barry/projects/Schroeter_Pcinnamomi/PcEffector/RxLR_Log2Fold.png")
-```
-IUM83_06578 rxlr rna helicase
-IUM83_10648 rxlr nudix
+#IUM83_06578 rxlr rna helicase
+#IUM83_10648 rxlr nudix
+
 ```{r}
 
 crn <- pccrn$gene_id
@@ -512,35 +562,20 @@ crn.de <- dds.df[dds.df$gene_id %in% crn, ]
 rownames(crn.de) <- crn.de$gene_id
 crn.de$gene_id <- NULL
 
-col_ann <- colData[,c(1,3)]
-rownames(col_ann) <- col_ann$Sample
-col_ann <- data.frame(col_ann)
-col_ann$Stage <- as.factor(col_ann$Stage)
-col_ann <- col_ann[order(col_ann$Stage),]
-col_ann$sample_ID <- NULL
 
-col_ann$Stage <- factor(col_ann$Stage, levels = c("Vegetative", "Early", "Middle", "Late"))
+png("CRN_normalized.png", width = 6400, height = 6400, pointsize = 10, res = 600)
 
-
-col_ann <- col_ann[order(col_ann$Stage), ]
-
-filename <- "CRN_normalized.png"
-png(filename, width = width, height = height, pointsize = pointsize, res = resolution)
-
-pheatmap(crn.de,  scale = "row",
+crnpmh <- pheatmap(crn.de,  scale = "row",
          cluster_rows = TRUE, cluster_cols = F,
          display_numbers = F, 
          fontsize_row = 8, fontsize_col = 8, 
          annotation_col = col_ann,
          show_colnames = FALSE,
          cellheight = 8, cellwidth = 40,
-         main = "CRN - normalized")
+         main = "CRN")
 dev.off()
 ```
 
-```{r}
-knitr::include_graphics("/mnt/data/barry/projects/Schroeter_Pcinnamomi/PcEffector/CRN_normalized.png")
-```
 ```{r}
 crnlog <- pccrn$gene_id
 
@@ -558,8 +593,7 @@ crn.matrix <- matrix(
 rownames(crn.matrix) <- crnede$gene_id
 colnames(crn.matrix) <- c("Early", "Middle", "Late")
 
-filename <- "CRN_Log2Fold.png"
-png(filename, width = width, height = height, pointsize = pointsize, res = resolution)
+png("CRN_Log2Fold.png", width = 6400, height = 6400, pointsize = 10, res = 600)
 
 # Create the heatmap with row labels
 pheatmap(crn.matrix,
@@ -569,12 +603,8 @@ pheatmap(crn.matrix,
          cluster_cols = FALSE,
          show_rownames = TRUE,
          labels_row = crnede$gene_id,
-         main = "CRN - log2Foldchange")
+         main = "CRN")
 dev.off()
-```
-
-```{r}
-knitr::include_graphics("/mnt/data/barry/projects/Schroeter_Pcinnamomi/PcEffector/CRN_Log2Fold.png")
 ```
 
 ```{r}
@@ -584,24 +614,9 @@ nlp.de <- dds.df[dds.df$gene_id %in% nlp, ]
 rownames(nlp.de) <- nlp.de$gene_id
 nlp.de$gene_id <- NULL
 
-col_ann <- colData[,c(1,3)]
-rownames(col_ann) <- col_ann$Sample
-col_ann <- data.frame(col_ann)
-col_ann$Stage <- as.factor(col_ann$Stage)
-col_ann <- col_ann[order(col_ann$Stage),]
-col_ann$sample_ID <- NULL
+png("NLP_mormalized.png", width = 6400, height = 6400, pointsize = 10, res = 600)
 
-desired_order <- c("Vegetative", "Early", "Middle", "Late")
-
-# Order the `col_ann` dataframe based on the specified order
-col_ann$Stage <- factor(col_ann$Stage, levels = desired_order)
-col_ann <- col_ann[order(col_ann$Stage), ]
-head(col_ann, 12)
-
-filename <- "NLP_mormalized.png"
-png(filename, width = width, height = height, pointsize = pointsize, res = resolution)
-
-pheatmap(nlp.de,  scale = "row",
+nlpphm <- pheatmap(nlp.de,  scale = "row",
          cluster_rows = TRUE, cluster_cols = F,
          display_numbers = F, 
          fontsize_row = 8, fontsize_col = 8, 
@@ -612,9 +627,6 @@ pheatmap(nlp.de,  scale = "row",
 dev.off()
 ```
 
-```{r}
-knitr::include_graphics("/mnt/data/barry/projects/Schroeter_Pcinnamomi/PcEffector/NLP_mormalized.png")
-```
 ```{r}
 nlplog <- pcnlp$gene_id
 
@@ -632,8 +644,7 @@ nlp.matrix <- matrix(
 rownames(nlp.matrix) <- nlpede$gene_id
 colnames(nlp.matrix) <- c("Early", "Middle", "Late")
 
-filename <- "NLP_Log2Fold.png"
-png(filename, width = width, height = height, pointsize = pointsize, res = resolution)
+png("NLP_Log2Fold.png",  width = 6400, height = 6400, pointsize = 10, res = 600)
 
 # Create the heatmap with row labels
 pheatmap(nlp.matrix,
@@ -643,12 +654,10 @@ pheatmap(nlp.matrix,
          cluster_cols = FALSE,
          show_rownames = TRUE,
          labels_row = crnede$gene_id,
-         main = "NLP - log2Foldchange")
+         main = "NLP")
 dev.off()
 ```
-```{r, echo=FALSE, out.width='100%'}
-knitr::include_graphics("/mnt/data/barry/projects/Schroeter_Pcinnamomi/PcEffector/NLP_Log2Fold.png")
-```
+
 ```{r}
 PF00964. <-PF00964$protein_id
 PF00964.id <- gtf.faa.omicsbox[gtf.faa.omicsbox$protein_id %in% PF00964., ]
@@ -669,8 +678,7 @@ pfam.matrix <- matrix(
 rownames(pfam.matrix) <- pfamede$gene_id
 colnames(pfam.matrix) <- c("Early", "Middle", "Late")
 
-filename <- "Pfam_Log2Fold.png"
-png(filename, width = width, height = height, pointsize = pointsize, res = resolution)
+png("Elicitin_Log2Fold.png", width = 6400, height = 6400, pointsize = 10, res = 600)
 
 # Create the heatmap with row labels
 pheatmap(pfam.matrix,
@@ -680,13 +688,9 @@ pheatmap(pfam.matrix,
          cluster_cols = FALSE,
          show_rownames = TRUE,
          labels_row = pfamede$gene_id,
-         main = "Elicitin - log2Foldchange")
+         main = "Elicitin")
 dev.off()
 
-```
-
-```{r, echo=FALSE, out.width='100%'}
-knitr::include_graphics("/mnt/data/barry/projects/Schroeter_Pcinnamomi/PcEffector/Pfam_Log2Fold.png")
 ```
 
 ```{r, upregulated secreted lineplot, echo=FALSE}
@@ -705,9 +709,9 @@ es_non_effector_ESleup <- ESleup[ESleup$ID == "Non_effector", "es"]
 # Create a combined dataframe
 combined_data <- data.frame(Dataset = rep(c("ESeeup", "ESmeup", "ESleup"), each = 3),
                             GeneSet = rep(c("Apoplastic", "Cytosolic", "Non_effector"), times = 3),
-                            ES = c(es_apop_ESeeup, es_cyto_ESeeup, es_non_effector_ESeeup,
-                                   es_apop_ESmeup, es_cyto_ESmeup, es_non_effector_ESmeup,
-                                   es_apop_ESleup, es_cyto_ESleup, es_non_effector_ESleup))
+ES = c(es_apop_ESeeup, es_cyto_ESeeup, es_non_effector_ESeeup,
+       es_apop_ESmeup, es_cyto_ESmeup, es_non_effector_ESmeup,
+       es_apop_ESleup, es_cyto_ESleup, es_non_effector_ESleup))
 
 
 dataset_order <- c("ESeeup", "ESmeup", "ESleup")
@@ -716,14 +720,7 @@ x_labels <- c("Early", "Middle", "Late")
 # Convert the "Dataset" column to a factor with the desired order and labels
 combined_data$Dataset <- factor(combined_data$Dataset, levels = dataset_order, labels = x_labels)
 
-filename <- "Secreted_enrichment_scores.png"
-
-png(filename)
-
-width <- 8  
-height <- 8  
-
-png(filename, width = width, height = height, units = "in", res = 300)
+png("Secreted_enrichment_scores.png", width = 3600, height = 2400, pointsize = 10, res = 600)
 
 ggplot(combined_data, aes(x = Dataset, y = ES, color = GeneSet, group = GeneSet)) +
   geom_line() +
@@ -734,10 +731,6 @@ ggplot(combined_data, aes(x = Dataset, y = ES, color = GeneSet, group = GeneSet)
   theme_minimal()
 
 dev.off()
-```
-
-```{r, echo=FALSE, out.width='100%'}
-knitr::include_graphics("/mnt/data/barry/projects/Schroeter_Pcinnamomi/PcEffector/Secreted_enrichment_scores.png")
 ```
 
 ```{r}
@@ -825,15 +818,7 @@ res_df <- data.frame(
   log2FoldChange = res_early_vs_vegetative$log2FoldChange
 )
 
-filename <- "Earlysecretedplot.png"
-
-# Create a PNG device
-png(filename)
-
-width <- 10  
-height <- 6  
-
-png(filename, width = width, height = height, units = "in", res = 300)
+png("Earlysecretedplot.png", width = 10, height = 10, units = "in", res = 300)
 ggplot(res_df, aes(x = log10(baseMean), y = log2FoldChange)) +
   geom_point(color = "gray", alpha = 0.5, size = 2, shape = 19) +
   geom_point(data = essig, aes(color = "Effector"), size = 2, shape = 19) +
@@ -856,10 +841,6 @@ ggplot(res_df, aes(x = log10(baseMean), y = log2FoldChange)) +
   theme(plot.title = element_text(face = "bold", size = 16))
 
 dev.off()
-```
-
-```{r, echo=FALSE, out.width='100%'}
-knitr::include_graphics("/mnt/data/barry/projects/Schroeter_Pcinnamomi/PcEffector/Earlysecretedplot.png")
 ```
 
 ```{r, middle secreted smear}
@@ -890,15 +871,7 @@ res_df <- data.frame(
   log2FoldChange = res_middle_vs_vegetative$log2FoldChange
 )
 
-filename <- "Midsecretedplot.png"
-
-# Create a PNG device
-png(filename)
-
-width <- 10  
-height <- 6  
-
-png(filename, width = width, height = height, units = "in", res = 300)
+png("Midsecretedplot.png", width = 10, height = 10, units = "in", res = 300)
 ggplot(res_df, aes(x = log10(baseMean), y = log2FoldChange)) +
   geom_point(color = "gray", alpha = 0.5, size = 2, shape = 19) +
   geom_point(data = mssig, aes(color = "Effector"), size = 2, shape = 19) +
@@ -921,10 +894,6 @@ ggplot(res_df, aes(x = log10(baseMean), y = log2FoldChange)) +
   theme(plot.title = element_text(face = "bold", size = 16))
 
 dev.off()
-```
-
-```{r, echo=FALSE, out.width='100%'}
-knitr::include_graphics("/mnt/data/barry/projects/Schroeter_Pcinnamomi/PcEffector/Midsecretedplot.png")
 ```
 
 ```{r, late secreted smear}
@@ -955,15 +924,7 @@ res_df <- data.frame(
   log2FoldChange = res_late_vs_vegetative$log2FoldChange
 )
 
-filename <- "Latesecretedplot.png"
-
-# Create a PNG device
-png(filename)
-
-width <- 10  
-height <- 6  
-
-png(filename, width = width, height = height, units = "in", res = 300)
+png("Latesecretedplot.png", width = 10, height = 10, units = "in", res = 300)
 ggplot(res_df, aes(x = log10(baseMean), y = log2FoldChange)) +
   geom_point(color = "gray", alpha = 0.5, size = 2, shape = 19) +
   geom_point(data = mssig, aes(color = "Effector"), size = 2, shape = 19) +
@@ -986,10 +947,6 @@ ggplot(res_df, aes(x = log10(baseMean), y = log2FoldChange)) +
   theme(plot.title = element_text(face = "bold", size = 16))
 
 dev.off()
-```
-
-```{r, echo=FALSE, out.width='100%'}
-knitr::include_graphics("/mnt/data/barry/projects/Schroeter_Pcinnamomi/PcEffector/Latesecretedplot.png")
 ```
 
 ## Session information
