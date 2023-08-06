@@ -24,6 +24,7 @@ library("eulerr")
 library(officer)
 library(flextable)
 
+
 ```
 
 Upload files
@@ -201,9 +202,6 @@ ggplot(PCA, aes(PC1, PC2, color = condition)) +
         legend.key.size = unit(1, "lines"))  
 
 dev.off()
-```
-```{r}
-knitr::include_graphics("../Figures/PCA_vst.png")
 ```
 
 ```{r}
@@ -457,8 +455,14 @@ summary(res_middle_vs_vegetative)
 res_middle_vs_vegetative
 ```
 
-```{r, Top 50 most significant genes based on p-value - Middle}
-top_genes_mid <- head(res_middle_vs_vegetative[order(res_middle_vs_vegetative$pvalue), ], 50)
+```{r, Top 50 most significant genes based on p-value/baseMean - Middle}
+top_genes_mid <- as.data.frame(res_middle_vs_vegetative[order(res_middle_vs_vegetative$pvalue), ])
+
+top_genes_mid <- top_genes_mid %>%
+  dplyr::filter(baseMean >= 1000) %>%
+  arrange(pvalue) %>%
+  head(50)
+
 
 top_gene_expression_mid.id <- as.data.frame(top_genes_mid)
 top_gene_expression_mid.id$gene_id <- rownames(top_gene_expression_mid.id)
@@ -569,12 +573,6 @@ print(earlydeseqtable)
 #save_as_docx(earlydeseqtable, path =  "/mnt/data/barry/projects/Schroeter_Pcinnamomi/sequencing_stats/earlydeseqtable.docx", pr_section = sect_properties)
 ```
 
-
-```{r}
-knitr::include_graphics("../Figures/Mid_pheatmap-scaledl2fc.png")
-knitr::include_graphics("../Figures/MidDEvolcano.png")
-```
-
 ```{r, late summary}
 # To compare "Late" vs "Vegetative"
 res_late_vs_vegetative <- results(dds, contrast = c("condition", "48h", "0h"))
@@ -666,11 +664,29 @@ dev.off()
 ```
 
 ```{r}
-earlydeseqtable <- head(top_gene_expression_early.id, 10)
+deseqtable <- read.csv("/mnt/data/barry/projects/Schroeter_Pcinnamomi/shared_scripts/finaltable.tsv")
 
-# Order columns logically 
+colnames(deseqtable) <- c("gene_id", "Protein name", "Product", "GO BP terms", "GO BP IDs", "GO MF terms", "GO MF IDs", "GO CC terms", "GO CC IDs", "SP, TM", "Effector")
+
+```
+
+```{r}
+duplicates <- any(duplicated(earlydeseqtable$Gene_name))
+
+# Print the result
+if (duplicates) {
+  cat("The 'Gene name' column contains duplicates.\n")
+} else {
+  cat("The 'Gene name' column does not contain duplicates.\n")
+}
+```
+
+
+```{r}
+earlydeseqtable <- head(top_gene_expression_early.id, 50)
+
 earlydeseqtable <- earlydeseqtable %>% 
-  dplyr::select(c(gene_id, protein_id, product, GO_terms, baseMean, log2FoldChange, padj))
+  dplyr::select(c(gene_id, baseMean, log2FoldChange, padj))
 
 earlydeseqtable$baseMean <- round(earlydeseqtable$baseMean)
 earlydeseqtable$log2FoldChange <- round(earlydeseqtable$log2FoldChange, 2)
@@ -678,26 +694,20 @@ earlydeseqtable$padj <- as.numeric(earlydeseqtable$padj)
 # Format the 'padj' column to scientific notation with two decimal places
 earlydeseqtable$padj <- sprintf("%.2e", earlydeseqtable$padj)
 
-# Rename columns 
-colnames(earlydeseqtable) <- c("Gene name", "Protein name", "Product", "GO term", "baseMean", "log2FoldChange", "padj")
+earlydeseqtable <-  deseqtable %>%
+  right_join(earlydeseqtable, by = "gene_id")
 
 view(earlydeseqtable)
 
-earlydeseqtable <-  flextable(earlydeseqtable) %>%
+earlydeseqtable.ft <-  flextable(earlydeseqtable) %>%
   theme_booktabs() %>%
+  add_header_row(values = c("", "Biological Process", "Molecular Function", "Cellular Component", "Prediction", "Expression values"), colwidths = c(3,2,2,2,2,3)) %>%
   align(align = "center", part = c("all"))
 
-print(earlydeseqtable)
+print(earlydeseqtable.ft)
 
-#save_as_docx(earlydeseqtable, path =  "/mnt/data/barry/projects/Schroeter_Pcinnamomi/sequencing_stats/earlydeseqtable.docx", pr_section = sect_properties)
+save_as_docx(earlydeseqtable.ft, path =  "/mnt/data/barry/projects/Schroeter_Pcinnamomi/sequencing_stats/earlydeseqtable.docx", pr_section = sect_properties)
 ```
-
-```{r}
-knitr::include_graphics("../Figures/Late_pheatmap-scaledl2fc.png")
-knitr::include_graphics("../Figures/LateDEvolcano.png")
-```
-
-
 
 
 ## Session information
