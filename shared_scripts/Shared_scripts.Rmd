@@ -1,0 +1,216 @@
+---
+title: "Shared_scripts"
+author: "BWSchroeter"
+date: "2023-06-11"
+output: html_document
+---
+
+```{r, load libraries, include=FALSE}
+
+library("kableExtra")
+library(WGCNA)
+library(DESeq2)
+library(GEOquery)
+library(tidyverse)
+library(gridExtra)
+library(reshape2)
+library(rtracklayer)
+library(dplyr)
+library(TCseq)
+library(edgeR)
+library(SummarizedExperiment)
+library(ggplot2)
+library(grid)
+library(Cairo)
+```
+
+```{r, include=FALSE}
+source("pcinnamomi_annotations.R", local = knitr::knit_global())
+source("sample_names.R", local = knitr::knit_global())
+source("countmatrix.R", local = knitr::knit_global())
+
+```
+
+Load Phytophthora cinnamomi gtf file, clean up to get Gene IDs
+adding line
+Combine alternatively spliced transcripts (seen in transcript_id as -RA and RB)
+
+```{r}
+pc.gtf <- rtracklayer::import("https://ftp.ncbi.nlm.nih.gov/genomes/genbank/protozoa/Phytophthora_cinnamomi/latest_assembly_versions/GCA_018691715.1_ASM1869171v1/GCA_018691715.1_ASM1869171v1_genomic.gtf.gz")
+pc.df <- as.data.frame((pc.gtf))
+
+pc.genes <- filter(pc.df, type == "start_codon")
+pc.geneids <- select(pc.genes, gene_id, product, protein_id)  
+
+uniqueprot <- unique(pc.df[pc.df$locus_tag,])
+
+pc.annotations <- pc.geneids %>% 
+  distinct(gene_id, .keep_all = T)
+nrow(pc.annotations)
+
+pcannot <- as.matrix(pc.annotations)
+
+#write.table(pcannot, file = "pcgeneids.tsv",quote=FALSE,sep="\t")
+```
+
+Load GO terms blasted from Omicsbox 
+```{r}
+goterms <- read.delim('pc.goterms.txt', header = TRUE) #%>%
+  select(c(SeqName, GO.IDs, GO.Names, Description))
+  
+head(goterms)
+
+colnames(goterms) <- c("protein_id", "GO_terms", "GO_descripton", "description")
+
+goterms.df <- dplyr::right_join(goterms, pc.annotations, by = 'protein_id')
+nrow(goterms.df)
+```
+
+Make GO term list for enrichment analysis
+
+```{r}
+splitgt.df <- as.tibble(goterms.df) %>%
+  separate_longer_delim(c(GO_terms, GO_descripton), delim = ";")
+
+splitgt.df <- as.data.frame(splitgt.df)
+
+#strip leading spaces
+splitgt.df$GO_terms <- gsub(" ","",splitgt.df$GO_terms)
+splitgt.df$GO_descripton <- gsub("^ ","",splitgt.df$GO_descripton)
+head(splitgt.df, 10)
+
+gu <- unique(splitgt.df$GO_terms)
+head(gu,20)
+
+gul <- lapply(1:length(gu), function(i){
+  mygo <- gu[i]
+  unique(splitgt.df[splitgt.df$GO_terms == mygo, "gene_id"])
+})
+
+names(gul) <- lapply(1:length(gu), function(i){
+  mygo <- gu[i]
+  desc <- head(splitgt.df[splitgt.df$GO_terms == mygo, "GO_descripton"],1)
+  id_desc <- paste(mygo,desc)
+})
+
+head(names(gul))
+
+```
+Assemble count matrix and coldata file
+
+```{r, echo=FALSE}
+tmp<-read.table("3col.tsv.gz",header=F)
+x<-as.matrix(acast(tmp, V2~V1, value.var="V3"))
+colnames(x)<-sapply(strsplit(colnames(x),"_"),"[[",1)
+
+head(x)
+#write.table(x,file="countmatrix.tsv",quote=FALSE,sep="\t")
+```
+
+Import files into r
+
+```{r}
+coldata <- read.table('sample_info.tsv')
+Pcgenenames <- read.table('pcgeneids.tsv', row.names = 1, quote = "", sep='\t', fill = TRUE, header = TRUE)
+IUM83Tanjilcountmatrix <- read.table('countmatrix.tsv') 
+```
+
+Clean countmatrix for P. cinnamomi analysis
+
+```{r}
+collabels <- colnames(IUM83Tanjilcountmatrix) <- (coldata$Sample)
+colnames(IUM83Tanjilcountmatrix) <- collabels
+
+IUM83Tanjilcountmatrix <- tibble::rownames_to_column(IUM83Tanjilcountmatrix, "gene_id")
+
+IUM83CountMatrix <- IUM83Tanjilcountmatrix %>% 
+  filter(str_detect(gene_id, "IUM83")) 
+  
+rownames(IUM83CountMatrix) <- IUM83CountMatrix$gene_id
+IUM83CountMatrix <- IUM83CountMatrix [ ,-1]
+IUM83CountMatrix <- as.data.frame(IUM83CountMatrix)
+IUM83CountMatrix <- IUM83CountMatrix[ ,-(1:12)]
+
+head(IUM83CountMatrix)
+#write.table(IUM83CountMatrix, file = "Pc_countmatrix.tsv",quote=FALSE,sep="\t")
+```
+```{r}
+pc.gtf <- rtracklayer::import("https://ftp.ncbi.nlm.nih.gov/genomes/genbank/protozoa/Phytophthora_cinnamomi/latest_assembly_versions/GCA_018691715.1_ASM1869171v1/GCA_018691715.1_ASM1869171v1_genomic.gtf.gz")
+pc.df <- as.data.frame((pc.gtf))
+
+pc.genes <- filter(pc.df, type == "start_codon")
+```
+
+download .faa file https://ftp.ncbi.nlm.nih.gov/genomes/genbank/protozoa/Phytophthora_cinnamomi/latest_assembly_versions/GCA_018691715.1_ASM1869171v1/GCA_018691715.1_ASM1869171v1_protein.faa.gz
+
+```{r}
+# Read the .faa file
+faa_file <- "GCA_018691715.1_ASM1869171v1_protein.faa"  
+sequences <- readAAStringSet(faa_file, format = "fasta")
+
+formatted_sequences <- paste0(">", names(sequences), "\n", as.character(sequences), "\n")
+output_file <- "/mnt/data/barry/projects/Schroeter_Pcinnamomi/PcEffector/Pcgenes.fasta" 
+writeLines(formatted_sequences, output_file)
+
+Pcgenenames <- read.table('pcgeneids.tsv', row.names = 1, quote = "", sep='\t', fill = TRUE, header = TRUE)
+
+load("Pceffetor.RData")
+
+# first rearrange cols
+allgenes <- detectedgenes
+allgenes$gene_id<-rownames(allgenes)
+rownames(allgenes)<-seq(nrow(allgenes))
+head(allgenes)
+
+Pcgenenames <- read.table('pcgeneids.tsv', row.names = 1, quote = "", sep='\t', fill = TRUE, header = TRUE)
+
+pcprotein.id <- dplyr::right_join(Pcgenenames, allgenes, by = 'gene_id')
+
+# Define a list of protein IDs to extract
+protein_list <- pcprotein.id$protein_id
+
+```
+
+```{r}
+# Read the .faa file
+#faa_file <- "GCA_018691715.1_ASM1869171v1_protein.faa"  
+#sequences <- readAAStringSet(faa_file)
+
+# Extract headers and sequences
+headers <- names(sequences)
+sequence_strings <- as.character(sequences)
+
+# Extract protein identifiers from headers
+protein_identifiers <- sub("^>(\\S+).*", "\\1", headers)
+
+# Create a data frame with protein identifiers and sequences
+df <- data.frame(protein_id = protein_identifiers, Sequence = sequence_strings, stringsAsFactors = FALSE)
+
+# Filter the "ProteinID" column to include only the first 12 characters
+df$protein_id <- substr(df$protein_id, 1, 12)
+
+gtf.faa <- dplyr::right_join(df, pc.genes, by = 'protein_id') 
+gtf.faa <- gtf.faa[, c(1,2,12, 19)]
+
+# Print the updated data frame
+head(df)
+uniqueprot <- unique(df[df$protein_id,])
+pcprotein.idfaa <- dplyr::right_join(df, pcprotein.id, by = 'protein_id')
+pcprotein.idfaa <- pcprotein.idfaa[, 1:4]
+head(pcprotein.idfaa)
+```
+
+Load GO terms blasted from Omicsbox 
+```{r}
+goterms <- read.delim('pc.goterms.txt', header = TRUE) %>%
+   dplyr::select(c(SeqName, GO.IDs, GO.Names, Description))
+  
+colnames(goterms) <- c("protein_id", "GO_terms", "GO_descripton", "description")
+
+gtf.faa.omicsbox <- dplyr::right_join(gtf.faa, goterms, by = 'protein_id')
+
+head(gtf.faa.omicsbox)
+```
+
+function used to create .fasta for inputs
+

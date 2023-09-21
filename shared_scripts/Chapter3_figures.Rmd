@@ -1,0 +1,104 @@
+---
+title: "chapter3_figures"
+author: "BWSchroeter"
+output:
+ html_document:
+ toc: TRUE,
+ df_print: paged
+---
+#rmarkdown::render("Chapter3_figures.Rmd")
+
+```{r}
+```
+
+
+
+```{r, echo=FALSE, out.width='100%'}
+# Run script to get sequencing stats formatted
+source("/mnt/data/barry/projects/Schroeter_Pcinnamomi/sequencing_stats/sequencing_stats.R", 
+       local = knitr::knit_global())
+
+```
+
+```{r}
+# function to save tables landscape
+sect_properties <- prop_section(
+  page_size = page_size(
+    orient = "landscape",
+    width = 8.7, height = 11.7
+  ),
+  type = "continuous",
+  page_margins = page_mar()
+)
+```
+
+
+```{r}
+seqreadssupplementary <-  flextable(sequencing_table) %>%
+  theme_booktabs() %>%
+  italic(italic = TRUE, part = "header") %>%
+  add_header_row(values = c("", "Phytophthora cinnamomi", "Lupinus angustifolius"), colwidths = c(5,2,2)) %>%
+  align(align = "center", part = c("all"))
+  
+print(seqreadssupplementary) 
+
+#save_as_docx(ft, path =  "/mnt/data/barry/projects/Schroeter_Pcinnamomi/sequencing_stats/supplementary_table.docx", pr_section = sect_properties)
+```
+
+
+
+```{r}
+# Create sequencing table with out water controls 
+chptr3pctble <- sequencing_table[-c(1:12), ]
+
+chptr3pctble <-  flextable(chptr3pctble) %>%
+  theme_booktabs() %>%
+  italic(italic = TRUE, part = "header") %>%
+  add_header_row(values = c("", "Phytophthora cinnamomi", "Lupinus angustifolius"), colwidths = c(5,2,2)) %>%
+  align(align = "center", part = c("all"))
+
+print(chptr3pctble)
+
+#save_as_docx(chptr3pctble, path =  "/mnt/data/barry/projects/Schroeter_Pcinnamomi/sequencing_stats/pcseqstats_table.docx", pr_section = sect_properties)
+
+```
+
+# Effector analysis 
+```{r, echo=FALSE, out.width='100%'}
+knitr::include_graphics("/mnt/data/barry/projects/Schroeter_Pcinnamomi/PcEffector/predictedsecretome.png")
+```
+Figure_: Predicted secreted Phytophthora cinnamomi proteins. Total proteins obtained from .faa file were ran through multiple predictive models: SignalP, predicted signal peptides containing a Sec/SPI SPs using signalP6.0. Phobius, TMHMM and Pfam contain a predicted; signal peptides (Phobius-1.01); fewer than one transmembrane helix and a signal peptide within the first 60 amino acids (TMHMM-2.0C); or a Pfam domain associated with plant pathogenesis (Pfam-35.0), respectively using InterProScan 5.62-94. CAZyme are predicted carbohydrate-active enzymes using dbCAN3. Genome contains previously predicted known effectors (RxLR, CRN and NLPs) from Engelbrecht, Juanita, et al. 2021.    
+
+
+
+```{r, echo=FALSE, out.width='100%'}
+knitr::include_graphics("/mnt/data/barry/projects/Schroeter_Pcinnamomi/PcEffector/Effectorexpression.png")
+```
+
+Figure_: Detected predicted secreted Phytophthora cinnamomi genes expression at 18-, 30-, and 48 hours post inoculation (hpi) in lupin. Genes were considered up regulated if log2fold change was greater than 0 and padj < 0.05, while down regulated if log2fold change was less than 0 and padj < 0.05.
+
+
+```{r, echo=FALSE, out.width='100%'}
+knitr::include_graphics("/mnt/data/barry/projects/Schroeter_Pcinnamomi/PcEffector/Secreted_enrichment_scores.png")
+```
+
+Figure_: Over representative analysis (ORA) of predicted apoplastic effectors (red), cytosolic effectors (blue) predicted using EffectorP-3.0, together with secreted genes (black) up regulated at 18-, 30-, and 48 hours post inoculation (hpi) in lupin. Background genes are all genes detected throughout the time course. 
+
+```{r, echo=FALSE, out.width='100%'}
+knitr::include_graphics("/mnt/data/barry/projects/Schroeter_Pcinnamomi/PcEffector/Earlysecretedplot.png")
+```
+Figure_: Secreted Phytophthora cinnamomi genes expressed in Lupin at 18 hours post inoculation (hpi). Predicted effectors (red), predicted secreted genes (blue) and non significant secreted genes (black). Significance is denoted by +/- 2 log2foldchange in expression compared to vegetative hyphae grown on agar and padj > 0.5.
+
+
+
+```{r, echo=FALSE, out.width='100%'}
+knitr::include_graphics("/mnt/data/barry/projects/Schroeter_Pcinnamomi/PcEffector/Midsecretedplot.png")
+```
+Figure_: Secreted Phytophthora cinnamomi genes expressed in Lupin at 30 hours post inoculation (hpi). Predicted effectors (red), predicted secreted genes (blue) and non significant secreted genes (black). Significance is denoted by +/- log2foldchange in expression compared to vegetative hyphae grown on agar and padj > 0.5.
+
+```{r, echo=FALSE, out.width='100%'}
+knitr::include_graphics("/mnt/data/barry/projects/Schroeter_Pcinnamomi/PcEffector/Latesecretedplot.png")
+```
+Figure_: Secreted Phytophthora cinnamomi genes expressed in Lupin at 48 hours post inoculation (hpi). Predicted effectors (red), predicted secreted genes (blue) and non significant secreted genes (black). Significance is denoted by +/- log2foldchange in expression compared to vegetative hyphae grown on agar and padj > 0.5.
+
+

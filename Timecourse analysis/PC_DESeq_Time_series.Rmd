@@ -21,7 +21,6 @@ library(SummarizedExperiment)
 library(ggplot2)
 library(grid)
 library(clusterProfiler)
-#library("kableExtra")
 library(patchwork)
 library(ggplot2)
 library(RColorBrewer)
@@ -167,12 +166,13 @@ p <- timeclustplot(tca, value = "z-score(PRKM)", cols = 3)
 ```
 
 ```{r}
-p[[1]][["labels"]][["title"]] <- paste0("Cluster 1 - 1342 genes")
-p[[2]][["labels"]][["title"]] <- paste0("Cluster 2 - 2400 genes")
-p[[3]][["labels"]][["title"]] <- paste0("Cluster 3 - 947 genes")
-p[[4]][["labels"]][["title"]] <- paste0("Cluster 4 - 1896 genes")
-p[[5]][["labels"]][["title"]] <- paste0("Cluster 5 - 588 genes")
-p[[6]][["labels"]][["title"]] <- paste0("Cluster 6 - 671 genes")
+#change this depending on the number of clusters/genes
+p[[1]][["labels"]][["title"]] <- paste0("Cluster 1 - 650 genes")
+p[[2]][["labels"]][["title"]] <- paste0("Cluster 2 - 858 genes")
+p[[3]][["labels"]][["title"]] <- paste0("Cluster 3 - 2082 genes")
+p[[4]][["labels"]][["title"]] <- paste0("Cluster 4 - 1005 genes")
+p[[5]][["labels"]][["title"]] <- paste0("Cluster 5 - 1460 genes")
+p[[6]][["labels"]][["title"]] <- paste0("Cluster 6 - 1789 genes")
 ```
 
 
@@ -184,22 +184,13 @@ combined_plot <- wrap_plots(p[[1]], p[[2]], p[[3]], p[[4]], p[[5]], p[[6]], nrow
 
 ```{r}
 
-png(filename = "../Figures/PcTCA.png", width = 13800, height = 4800, pointsize = 10, res = 600)
+png(filename = "../Figures/PcTCA.png", width = 13800, height = 6400, pointsize = 10, res = 600)
 print(combined_plot)
 dev.off()
 
 ```
 
-
 ```{r}
-knitr::include_graphics("../Figures/PcTCA.png")
-```
-
-
-
-
-```{r}
-
 # Accessing the cluster information
 cluster_info <- tca@clusterRes@cluster
 
@@ -214,12 +205,19 @@ cluster_6_genes <- names(cluster_info[cluster_info == 6])
 ```
 
 ```{r}
-cluster_1_genes.id <- gtf.faa.omicsbox[gtf.faa.omicsbox$gene_id %in% cluster_1_genes, ]
-cluster_2_genes.id <- gtf.faa.omicsbox[gtf.faa.omicsbox$gene_id %in% cluster_2_genes, ]
-cluster_3_genes.id <- gtf.faa.omicsbox[gtf.faa.omicsbox$gene_id %in% cluster_3_genes, ]
-cluster_4_genes.id <- gtf.faa.omicsbox[gtf.faa.omicsbox$gene_id %in% cluster_4_genes, ]
-cluster_5_genes.id <- gtf.faa.omicsbox[gtf.faa.omicsbox$gene_id %in% cluster_5_genes, ]
-cluster_6_genes.id <- gtf.faa.omicsbox[gtf.faa.omicsbox$gene_id %in% cluster_6_genes, ]
+deseqtable <- read.csv("/mnt/data/barry/projects/Schroeter_Pcinnamomi/shared_scripts/finaltable.tsv")
+
+cluster_1_genes.id <- deseqtable[deseqtable$gene_id %in% cluster_1_genes, ]
+cluster_2_genes.id <- deseqtable[deseqtable$gene_id %in% cluster_2_genes, ]
+cluster_3_genes.id <- deseqtable[deseqtable$gene_id %in% cluster_3_genes, ]
+cluster_4_genes.id <- deseqtable[deseqtable$gene_id %in% cluster_4_genes, ]
+cluster_5_genes.id <- deseqtable[deseqtable$gene_id %in% cluster_5_genes, ]
+cluster_6_genes.id <- deseqtable[deseqtable$gene_id %in% cluster_6_genes, ]
+```
+
+```{r}
+plas_rows <- cluster_1_genes.id[cluster_1_genes.id$Effector == c("Apoplastic effector", "Cytoplasmic effector","Apoplastic/cytoplasmic effector"), ]
+
 ```
 
 ```{r, warning=FALSE}
@@ -326,92 +324,64 @@ combined_dataframe <- do.call(rbind, combined_data)
 print(combined_dataframe)
 ```
 
-```{r, fig.height=50, fig.width=50}
+```{r}
+write.csv(combined_dataframe, file = "/mnt/data/barry/projects/Schroeter_Pcinnamomi/Timecourse analysis/TCseqcluster_ORA.tsv", row.names = FALSE)
+```
+
+
+```{r}
 # Sort the combined_dataframe by cluster and -log10(p-adjusted)
 sorted_dataframe <- combined_dataframe[order(combined_dataframe$Cluster, -log10(combined_dataframe$p.adjust)), ]
 
+# Sort the dataframe by p.adjust in descending order
+sorted_dataframe <- sorted_dataframe %>%
+  arrange(Cluster, desc(p.adjust))
 
-cluster_colors <- c( "#00CC99", "#3399CC", "#003399", "#66CCFF", "#99FFCC")
+# Group by Cluster and select the top 5 rows with the highest p.adjust values
+top_5_highest_p_adjust <- sorted_dataframe %>%
+  group_by(Cluster) %>%
+  top_n(5, -p.adjust) %>%
+  ungroup()
 
-png("Pc_TCA.png", width = 6400, height = 6400, pointsize = 10, res = 600)
+# View the updated dataframe
+head(top_5_highest_p_adjust, 15)
 
-plot <- ggplot(sorted_dataframe, aes(x = -log10(p.adjust), y = reorder(ID, -log10(p.adjust)), fill = Cluster)) +
+num_clusters <- 7
+cluster_colors <- brewer.pal(num_clusters, "Set2")
+
+png(filename = "../Figures/PcTCA_ora.png", width = 13800, height = 6400, res = 600)
+
+plot <- ggplot(top_5_highest_p_adjust, aes(x = -log10(p.adjust), y = reorder(ID, -log10(p.adjust)), fill = Cluster)) +
   geom_bar(stat = "identity", orientation = "y") +
-  labs(title = "", x = "-log10(p-adjusted)", y = "") +
+  labs(title = "", x = "-log10(p-adjusted)", y = "", fill = "") +
   scale_fill_manual(values = cluster_colors) +
   theme_minimal() +
   theme(axis.title.y = element_text(angle = 0, hjust = 1, size = 12), 
         axis.text.y = element_text(size = 24, margin = margin(r = 0)),
-        legend.text = element_text(size = 20),
+        legend.text = element_text(size = 24),
         axis.text.x = element_text(size = 24),  
         axis.line.x = element_line(size = 1),
         legend.title = element_text(size = 24),
         axis.title.x = element_text(size = 24)  
   ) +
-  geom_vline(xintercept = -log10(0.05), linetype = "dashed", color = "black")
+  geom_vline(xintercept = -log10(0.05), linetype = "dashed", color = "black") + 
+  scale_x_continuous(limits = c(0, max(-log10(top_5_highest_p_adjust$p.adjust) * 1.2)))
 
 print(plot)
 
 dev.off()
-```
-
-```{r}
-knitr::include_graphics("../Timecourse analysis/Pc_TCA.png")
-```
-
-```{r}
-png(filename = "PcTCAandBP.png", width = 13800, height = 6400, pointsize = 10, res = 600)
-combined_plot2 <- wrap_plots(combined_plot, plot,  nrow = 2)
-combined_plot2
-dev.off()
-```
-
-```{r}
-
-png(filename = "../Figures/PcTCA.png", width = 13800, height = 6400, pointsize = 10, res = 600)
-print(combined_plot)
-dev.off()
 
 ```
-
 
 ```{r}
 knitr::include_graphics("../Figures/PcTCA.png")
 ```
 
-
-
 ```{r}
-print(p[[1]])
-#GOc1 %>% kbl(caption="GO terms associated with Cluster 1") %>%   kable_paper("hover", full_width = F)
+knitr::include_graphics("../Figures/PcTCA_ora.png")
 ```
 
 ```{r}
-print(p[[2]])
-#GOc2 %>% kbl(caption="GO terms associated with Cluster 2") %>%   kable_paper("hover", full_width = F)
-```
-
-
-```{r}
-print(p[[3]])
-#GOc3 %>% kbl(caption="GO terms associated with Cluster 3") %>%   kable_paper("hover", full_width = F)
-```
-
-
-```{r}
-print(p[[4]])
-#GOc4 %>% kbl(caption="GO terms associated with Cluster 4") %>%   kable_paper("hover", full_width = F)
-```
-
-
-```{r}
-print(p[[5]])
-#GOc5 %>% kbl(caption="GO terms associated with Cluster 5") %>%   kable_paper("hover", full_width = F)
-```
-
-
-```{r}
-print(p[[6]])
-#GOc6 %>% kbl(caption="GO terms associated with Cluster 6") %>%   kable_paper("hover", full_width = F)
+sessionInfo()
 ```
 

@@ -1,0 +1,290 @@
+x
+<table class="table" style="margin-left: auto; margin-right: auto;">
+ <thead>
+<tr>
+<th style="empty-cells: hide;border-bottom:hidden;" colspan="5"></th>
+<th style="border-bottom:hidden;padding-bottom:0; padding-left:3px;padding-right:3px;text-align: center; font-weight: bold; font-style: italic; " colspan="2"><div style="border-bottom: 1px solid #ddd; padding-bottom: 5px; ">Phytophthora cinnamomi</div></th>
+<th style="border-bottom:hidden;padding-bottom:0; padding-left:3px;padding-right:3px;text-align: center; font-weight: bold; font-style: italic; " colspan="2"><div style="border-bottom: 1px solid #ddd; padding-bottom: 5px; ">Lupinus angustifolius</div></th>
+</tr>
+  <tr>
+   <th style="text-align:center;"> Accession </th>
+   <th style="text-align:center;"> Sample name </th>
+   <th style="text-align:center;"> Sampling time </th>
+   <th style="text-align:center;"> Total reads </th>
+   <th style="text-align:center;"> Total mapped reads </th>
+   <th style="text-align:center;"> Mapped reads </th>
+   <th style="text-align:center;"> Mapped reads (%) </th>
+   <th style="text-align:center;"> Mapped reads </th>
+   <th style="text-align:center;"> Mapped reads (%) </th>
+  </tr>
+ </thead>
+<tbody>
+  <tr grouplength="12"><td colspan="9" style="border-bottom: 1px solid;"><strong>Water controls</strong></td></tr>
+<tr>
+   <td style="text-align:center;padding-left: 2em;" indentlevel="1"> BS01_S2 </td>
+   <td style="text-align:center;"> LaH0_1 </td>
+   <td style="text-align:center;"> 0 hpi </td>
+   <td style="text-align:center;"> 35,723,772 </td>
+   <td style="text-align:center;"> 30,381,762 </td>
+   <td style="text-align:center;"> 7 </td>
+   <td style="text-align:center;"> 0.00 </td>
+   <td style="text-align:center;"> 30,381,755 </td>
+   <td style="text-align:center;"> 100.00 </td>
+  </tr>
+  <tr>
+   <td style="text-align:center;padding-left: 2em;" indentlevel="1"> BS02_S3 </td>
+   <td style="text-align:center;"> LaH0_2 </td>
+   <td style="text-align:center;"> 0 hpi </td>
+   <td style="text-align:center;"> 40,589,157 </td>
+   <td style="text-align:center;"> 33,832,923 </td>
+   <td style="text-align:center;"> 15 </td>
+   <td style="text-align:center;"> 0.00 </td>
+   <td style="text-align:center;"> 33,832,908 </td>
+   <td style="text-align:center;"> 100.00 </td>
+  </tr>
+  <tr>
+   <td style="text-align:center;padding-left: 2em;" indentlevel="1"> BS03_S4 </td>
+   <td style="text-align:center;"> LaH0_3 </td>
+   <td style="text-align:center;"> 0 hpi </td>
+   <td style="text-align:center;"> 41,987,225 </td>
+   <td style="text-align:center;"> 35,747,378 </td>
+   <td style="text-align:center;"> 12 </td>
+   <td style="text-align:center;"> 0.00 </td>
+   <td style="text-align:center;"> 35,747,366 </td>
+   <td style="text-align:center;"> 100.00 </td>
+  </tr>
+  <tr>
+   <td style="text-align:center;padding-left: 2em;" indentlevel="1"> BS04_S5 </td>
+   <td style="text-align:center;"> LaH18_1 </td>
+   <td style="text-align:center;"> 18 hpi </td>
+   <td style="text-align:center;"> 40,946,170 </td>
+   <td style="text-align:center;"> 34,126,704 </td>
+   <td style="text-align:center;"> 48 </td>
+   <td style="text-align:center;"> 0.00 </td>
+   <td style="text-align:center;"> 34,126,656 </td>
+   <td style="text-align:center;"> 100.00 </td>
+  </tr>
+  <tr>
+   <td style="text-align:center;padding-left: 2em;" indentlevel="1"> BS05_S6 </td>
+   <td style="text-align:center;"> LaH18_2 </td>
+   <td style="text-align:center;"> 18 hpi </td>
+   <td style="text-align:center;"> 52,569,117 </td>
+   <td style="text-align:center;"> 43,993,443 </td>
+   <td style="text-align:center;"> 18 </td>
+   <td style="text-align:center;"> 0.00 </td>
+   <td style="text-align:center;"> 43,993,425 </td>
+   <td style="text-align:center;"> 100.00 </td>
+  </tr>
+  <tr>
+   <td style="text-align:center;padding-left: 2em;" indentlevel="1"> BS06_S7 </td>
+   <td style="text-align:center;"> LaH18_3 </td>
+   <td style="text-align:center;"> 18 hpi </td>
+   <td style="text-align:center;"> 46,878,736 </td>
+   <td style="text-align:center;"> 39,131,548 </td>
+   <td style="text-align:center;"> 9 </td>
+   <td style="text-align:center;"> 0.00 </td>
+   <td style="text-align:center;"> 39,131,539 </td>
+   <td style="text-align:center;"> 100.00 </td>
+  </tr>
+  <tr>
+   <td style="text-align:center;padding-left: 2em;" indentlevel="1"> BS07_S8 </td>
+   <td style="text-align:center;"> LaH30_1 </td>
+   <td style="text-align:center;"> 30 hpi </td>
+   <td style="text-align:center;"> 35,807,174 </td>
+   <td style="text-align:center;"> 29,964,327 </td>
+   <td style="text-align:center;"> 159 </td>
+   <td style="text-align:center;"> 0.00 </td>
+   <td style="text-align:center;"> 29,964,168 </td>
+   <td style="text-align:center;"> 100.00 </td>
+  </tr>
+  <tr>
+   <td style="text-align:center;padding-left: 2em;" indentlevel="1"> BS08_S9 </td>
+   <td style="text-align:center;"> LaH30_2 </td>
+   <td style="text-align:center;"> 30 hpi </td>
+   <td style="text-align:center;"> 42,997,642 </td>
+   <td style="text-align:center;"> 35,706,355 </td>
+   <td style="text-align:center;"> 32 </td>
+   <td style="text-align:center;"> 0.00 </td>
+   <td style="text-align:center;"> 35,706,323 </td>
+   <td style="text-align:center;"> 100.00 </td>
+  </tr>
+  <tr>
+   <td style="text-align:center;padding-left: 2em;" indentlevel="1"> BS09_S10 </td>
+   <td style="text-align:center;"> LaH30_3 </td>
+   <td style="text-align:center;"> 30 hpi </td>
+   <td style="text-align:center;"> 32,647,597 </td>
+   <td style="text-align:center;"> 27,275,505 </td>
+   <td style="text-align:center;"> 24 </td>
+   <td style="text-align:center;"> 0.00 </td>
+   <td style="text-align:center;"> 27,275,481 </td>
+   <td style="text-align:center;"> 100.00 </td>
+  </tr>
+  <tr>
+   <td style="text-align:center;padding-left: 2em;" indentlevel="1"> BS10_S11 </td>
+   <td style="text-align:center;"> LaH48_1 </td>
+   <td style="text-align:center;"> 48 hpi </td>
+   <td style="text-align:center;"> 44,416,982 </td>
+   <td style="text-align:center;"> 36,614,529 </td>
+   <td style="text-align:center;"> 8 </td>
+   <td style="text-align:center;"> 0.00 </td>
+   <td style="text-align:center;"> 36,614,521 </td>
+   <td style="text-align:center;"> 100.00 </td>
+  </tr>
+  <tr>
+   <td style="text-align:center;padding-left: 2em;" indentlevel="1"> BS11_S12 </td>
+   <td style="text-align:center;"> LaH48_2 </td>
+   <td style="text-align:center;"> 48 hpi </td>
+   <td style="text-align:center;"> 34,172,572 </td>
+   <td style="text-align:center;"> 19,074,043 </td>
+   <td style="text-align:center;"> 126 </td>
+   <td style="text-align:center;"> 0.00 </td>
+   <td style="text-align:center;"> 19,073,917 </td>
+   <td style="text-align:center;"> 100.00 </td>
+  </tr>
+  <tr>
+   <td style="text-align:center;padding-left: 2em;" indentlevel="1"> BS12_S13 </td>
+   <td style="text-align:center;"> LaH48_3 </td>
+   <td style="text-align:center;"> 48 hpi </td>
+   <td style="text-align:center;"> 36,024,194 </td>
+   <td style="text-align:center;"> 28,807,216 </td>
+   <td style="text-align:center;"> 9 </td>
+   <td style="text-align:center;"> 0.00 </td>
+   <td style="text-align:center;"> 28,807,207 </td>
+   <td style="text-align:center;"> 100.00 </td>
+  </tr>
+  <tr grouplength="3"><td colspan="9" style="border-bottom: 1px solid;"><strong>Hyphae controls</strong></td></tr>
+<tr>
+   <td style="text-align:center;padding-left: 2em;" indentlevel="1"> BS13_S14 </td>
+   <td style="text-align:center;"> PcHyp_1 </td>
+   <td style="text-align:center;"> 0 hpi </td>
+   <td style="text-align:center;"> 46,476,987 </td>
+   <td style="text-align:center;"> 35,095,780 </td>
+   <td style="text-align:center;"> 35,095,057 </td>
+   <td style="text-align:center;"> 100.00 </td>
+   <td style="text-align:center;"> 723 </td>
+   <td style="text-align:center;"> 0.00 </td>
+  </tr>
+  <tr>
+   <td style="text-align:center;padding-left: 2em;" indentlevel="1"> BS14_S15 </td>
+   <td style="text-align:center;"> PcHyp_2 </td>
+   <td style="text-align:center;"> 0 hpi </td>
+   <td style="text-align:center;"> 42,719,153 </td>
+   <td style="text-align:center;"> 31,942,184 </td>
+   <td style="text-align:center;"> 31,940,908 </td>
+   <td style="text-align:center;"> 100.00 </td>
+   <td style="text-align:center;"> 1,276 </td>
+   <td style="text-align:center;"> 0.00 </td>
+  </tr>
+  <tr>
+   <td style="text-align:center;padding-left: 2em;" indentlevel="1"> BS15_S16 </td>
+   <td style="text-align:center;"> PcHyp_3 </td>
+   <td style="text-align:center;"> 0 hpi </td>
+   <td style="text-align:center;"> 42,953,852 </td>
+   <td style="text-align:center;"> 33,309,346 </td>
+   <td style="text-align:center;"> 33,308,551 </td>
+   <td style="text-align:center;"> 100.00 </td>
+   <td style="text-align:center;"> 795 </td>
+   <td style="text-align:center;"> 0.00 </td>
+  </tr>
+  <tr grouplength="9"><td colspan="9" style="border-bottom: 1px solid;"><em><strong>in planta</strong></em></td></tr>
+<tr>
+   <td style="text-align:center;padding-left: 2em;" indentlevel="1"> BS16_S17 </td>
+   <td style="text-align:center;"> LaPc18_1 </td>
+   <td style="text-align:center;"> 18 hpi </td>
+   <td style="text-align:center;"> 42,095,147 </td>
+   <td style="text-align:center;"> 35,019,695 </td>
+   <td style="text-align:center;"> 592,912 </td>
+   <td style="text-align:center;"> 1.69 </td>
+   <td style="text-align:center;"> 34,426,783 </td>
+   <td style="text-align:center;"> 98.31 </td>
+  </tr>
+  <tr>
+   <td style="text-align:center;padding-left: 2em;" indentlevel="1"> BS17_S18 </td>
+   <td style="text-align:center;"> LaPc18_2 </td>
+   <td style="text-align:center;"> 18 hpi </td>
+   <td style="text-align:center;"> 39,508,572 </td>
+   <td style="text-align:center;"> 32,954,524 </td>
+   <td style="text-align:center;"> 910,867 </td>
+   <td style="text-align:center;"> 2.76 </td>
+   <td style="text-align:center;"> 32,043,657 </td>
+   <td style="text-align:center;"> 97.24 </td>
+  </tr>
+  <tr>
+   <td style="text-align:center;padding-left: 2em;" indentlevel="1"> BS18_S19 </td>
+   <td style="text-align:center;"> LaPc18_3 </td>
+   <td style="text-align:center;"> 18 hpi </td>
+   <td style="text-align:center;"> 51,975,816 </td>
+   <td style="text-align:center;"> 42,950,048 </td>
+   <td style="text-align:center;"> 283,922 </td>
+   <td style="text-align:center;"> 0.66 </td>
+   <td style="text-align:center;"> 42,666,126 </td>
+   <td style="text-align:center;"> 99.34 </td>
+  </tr>
+  <tr>
+   <td style="text-align:center;padding-left: 2em;" indentlevel="1"> BS19_S20 </td>
+   <td style="text-align:center;"> LaPc30_1 </td>
+   <td style="text-align:center;"> 30 hpi </td>
+   <td style="text-align:center;"> 46,398,841 </td>
+   <td style="text-align:center;"> 38,122,434 </td>
+   <td style="text-align:center;"> 5,175,589 </td>
+   <td style="text-align:center;"> 13.58 </td>
+   <td style="text-align:center;"> 32,946,845 </td>
+   <td style="text-align:center;"> 86.42 </td>
+  </tr>
+  <tr>
+   <td style="text-align:center;padding-left: 2em;" indentlevel="1"> BS20_S21 </td>
+   <td style="text-align:center;"> LaPc30_2 </td>
+   <td style="text-align:center;"> 30 hpi </td>
+   <td style="text-align:center;"> 40,758,992 </td>
+   <td style="text-align:center;"> 33,559,178 </td>
+   <td style="text-align:center;"> 4,558,646 </td>
+   <td style="text-align:center;"> 13.58 </td>
+   <td style="text-align:center;"> 29,000,532 </td>
+   <td style="text-align:center;"> 86.42 </td>
+  </tr>
+  <tr>
+   <td style="text-align:center;padding-left: 2em;" indentlevel="1"> BS21_S22 </td>
+   <td style="text-align:center;"> LaPc30_3 </td>
+   <td style="text-align:center;"> 30 hpi </td>
+   <td style="text-align:center;"> 40,230,471 </td>
+   <td style="text-align:center;"> 33,263,922 </td>
+   <td style="text-align:center;"> 2,015,833 </td>
+   <td style="text-align:center;"> 6.06 </td>
+   <td style="text-align:center;"> 31,248,089 </td>
+   <td style="text-align:center;"> 93.94 </td>
+  </tr>
+  <tr>
+   <td style="text-align:center;padding-left: 2em;" indentlevel="1"> BS22_S23 </td>
+   <td style="text-align:center;"> LaPc48_1 </td>
+   <td style="text-align:center;"> 48 hpi </td>
+   <td style="text-align:center;"> 43,617,213 </td>
+   <td style="text-align:center;"> 34,877,458 </td>
+   <td style="text-align:center;"> 7,588,897 </td>
+   <td style="text-align:center;"> 21.76 </td>
+   <td style="text-align:center;"> 27,288,561 </td>
+   <td style="text-align:center;"> 78.24 </td>
+  </tr>
+  <tr>
+   <td style="text-align:center;padding-left: 2em;" indentlevel="1"> BS23_S24 </td>
+   <td style="text-align:center;"> LaPc48_2 </td>
+   <td style="text-align:center;"> 48 hpi </td>
+   <td style="text-align:center;"> 43,018,344 </td>
+   <td style="text-align:center;"> 34,583,412 </td>
+   <td style="text-align:center;"> 11,549,374 </td>
+   <td style="text-align:center;"> 33.40 </td>
+   <td style="text-align:center;"> 23,034,038 </td>
+   <td style="text-align:center;"> 66.60 </td>
+  </tr>
+  <tr>
+   <td style="text-align:center;padding-left: 2em;" indentlevel="1"> BS24_S25 </td>
+   <td style="text-align:center;"> LaPc48_3 </td>
+   <td style="text-align:center;"> 48 hpi </td>
+   <td style="text-align:center;"> 43,357,443 </td>
+   <td style="text-align:center;"> 34,541,507 </td>
+   <td style="text-align:center;"> 8,934,234 </td>
+   <td style="text-align:center;"> 25.87 </td>
+   <td style="text-align:center;"> 25,607,273 </td>
+   <td style="text-align:center;"> 74.13 </td>
+  </tr>
+</tbody>
+</table>
