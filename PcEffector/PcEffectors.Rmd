@@ -177,7 +177,7 @@ pts.id <- gtf.faa.omicsbox[gtf.faa.omicsbox$protein_id %in% phobius.tmhmm.signal
 #3373 predicted secreted proteins using EffectorP3.0 suggestion
 ```
 
-#bdCAN analysis
+#dbCAN analysis
 
 https://bcb.unl.edu/dbCAN2/blast.php using allpcgenes.fasta
 
@@ -195,9 +195,12 @@ dbcanresults <- read_tsv("dbCAN_allpcgenes.txt", show_col_types = FALSE)
 colnames(dbcanresults)[colnames(dbcanresults) == "Gene ID"] <- "protein_id"
 
 dbcan <- dbcanresults %>%
-  filter(`#ofTools` >= 2)
+  mutate(CAZyme = ifelse(`#ofTools` >= 2, "Yes", "No"))
 
-dbcan.id <- dplyr::right_join(gtf.faa.omicsbox, dbcan, by = 'protein_id')
+dbcan.filter <- dbcan %>%
+  filter(`#ofTools` >= 2) 
+
+dbcan.id <- dplyr::right_join(gtf.faa.omicsbox, dbcan.filter, by = 'protein_id')
 
 #which CAZymes do not have signal peptides
 dbcansecreted <- setdiff(dbcan.id$protein_id, signalpeptides.id$protein_id)
@@ -335,21 +338,46 @@ gtf.omicsbox.effector$Prediction <- ifelse(is.na(gtf.omicsbox.effector$Predictio
 gtf.omicsbox.effector <- gtf.omicsbox.effector %>%
   mutate(`SP, TM` = paste(SP, tmhelices, sep = ", "))
 
-write.csv(gtf.omicsbox.effector, file = "/mnt/data/barry/projects/Schroeter_Pcinnamomi/shared_scripts/effectortable.tsv", row.names = FALSE)
+```
 
+```{r}
+# add PHI blast results and use for TCseq cluster analysis
+phiblast <- read_delim("PHIB_results.tsv")
+
+gtf.omicsbox.effector.phi <- dplyr::right_join(phiblast, gtf.omicsbox.effector, by = 'protein_id')
+
+write.csv(gtf.omicsbox.effector.phi, file = "/mnt/data/barry/projects/Schroeter_Pcinnamomi/Timecourse analysis/effectortable.tsv", row.names = FALSE)
+
+```
+
+
+```{r, add significance columns}
+earlydesig <- as.data.frame(res_early_vs_vegetative)
+earlydesig$significant <- ""
+
+middesig <- as.data.frame(res_middle_vs_vegetative)
+middesig$significant <- ""
+
+latedesig <- as.data.frame(res_late_vs_vegetative)
+latedesig$significant <- ""
+
+# Update 'significant' column based on your conditions
+earlydesig$significant[earlydesig$log2FoldChange > 2 & earlydesig$padj < 0.05 | earlydesig$log2FoldChange < -2 & earlydesig$padj < 0.05] <- "*"
+middesig$significant[middesig$log2FoldChange > 2 & middesig$padj < 0.05 | middesig$log2FoldChange < -2 & middesig$padj < 0.05] <- "*"
+latedesig$significant[latedesig$log2FoldChange > 2 & latedesig$padj < 0.05 | latedesig$log2FoldChange < -2 & latedesig$padj < 0.05] <- "*"
 ```
 
 ```{r, effector expression, echo=FALSE}
 
-earlydetected <- as.data.frame(res_early_vs_vegetative)
-earlydetected$gene_id <- rownames(earlydetected)
+earlydetected <- as.data.frame(earlydesig)
+earlydetected$gene_id <- rownames(earlydesig)
 earlysecreted <- dplyr::right_join(earlydetected, inplantasecreted.id, by = 'gene_id')
 
-middetected <- as.data.frame(res_middle_vs_vegetative)
+middetected <- as.data.frame(middesig)
 middetected$gene_id <- rownames(middetected)
 midsecreted <- dplyr::right_join(middetected, inplantasecreted.id, by = 'gene_id')
 
-latedetected <- as.data.frame(res_late_vs_vegetative)
+latedetected <- as.data.frame(latedesig)
 latedetected$gene_id <- rownames(latedetected)
 latesecreted <- dplyr::right_join(latedetected, inplantasecreted.id, by = 'gene_id')
 
@@ -381,16 +409,6 @@ plot(euler(secreted),quantities = TRUE, labels = list(font = 24), main="In Plant
 dev.off()
 ```
 
-# Calculate the gene counts
-ESGENESUP <- length(essup)
-ESGENESDN <- length(essdn)
-EEGENESUP <- length(eesup)
-EEGENESDN <- length(eesdn)
-
-# Create the subtitle using the gene counts
-SUBHEADER <- paste(ESGENESUP, "Secreted genes Up-regulated (", EEGENESUP, "effectors),",
-                    ESGENESDN, "Secreted genes down-regulated (", EEGENESDN, "effectors)")
-
 ```{r, secretome expression stats, echo=FALSE}
 teeup <- length(earlysecreted[earlysecreted$log2FoldChange > 0 & earlysecreted$padj < 0.05, ])
 teedn <- length(earlysecreted[earlysecreted$log2FoldChange < -0 & earlysecreted$padj < 0.05, ])
@@ -402,7 +420,6 @@ tleup <- length(latesecreted[latesecreted$log2FoldChange > 0 & latesecreted$padj
 tledn <- length(latesecreted[latesecreted$log2FoldChange < 0 & latesecreted$padj < 0.05, ])
 
 ```
-
 
 ```{r, upregulated effector ORA, echo=FALSE}
 performEnrichmentAnalysis <- function(geneSet, sets, bg) {
@@ -495,29 +512,47 @@ col_ann <- col_ann[order(col_ann$Stage), ]
 
 ```
 
-
-```{r}
-
-rxlr <- pcrxlr$gene_id
-rxlr.de <- dds.df[dds.df$gene_id %in% rxlr, ]
-rownames(rxlr.de) <- rxlr.de$gene_id
-rxlr.de$gene_id <- NULL
-
-png("RxLR_normalized.png", width = 6400, height = 6400, pointsize = 10, res = 600)
-
-rxlrphm <- pheatmap(rxlr.de,  scale = "row",
-         cluster_rows = TRUE, cluster_cols = F,
-         display_numbers = F, 
-         fontsize_row = 8, fontsize_col = 8, 
-         annotation_col = col_ann,
-         show_colnames = FALSE,
-         cellheight = 8, cellwidth = 40,
-         main = "RxLR")
-dev.off()
-```
-
 IUM83_06578 rxlr rna helicase
 IUM83_10648 rxlr nudix
+IUM83_07793 putative haustorium associated protein
+
+```{r}
+selected_rows <- dds_gene_expression[c("IUM83_07793", "IUM83_10648", "IUM83_06578"), ]
+```
+
+```{r}
+Casgoi <- c("IUM83_07793", "IUM83_10648", "IUM83_06578")
+
+Casgoiede <- earlydetected[earlydetected$gene_id %in% Casgoi, ]
+Casgoimde <- middetected[middetected$gene_id %in% Casgoi, ]
+Casgoilde <- latedetected[latedetected$gene_id %in% Casgoi, ]
+
+goi_matrix <- matrix(
+  c(Casgoiede$log2FoldChange, Casgoimde$log2FoldChange, Casgoilde$log2FoldChange),
+  nrow = length(Casgoiede$log2FoldChange),
+  ncol = 3,
+  byrow = FALSE
+)
+
+rownames(goi_matrix) <- Casgoiede$gene_id
+colnames(goi_matrix) <- c("Early", "Middle", "Late")
+
+filename <- 
+png("goi_Log2Fold_numbers.png", width = 3600, height = 6400, res = 600)
+
+# Create the heatmap with row labels
+pheatmap(goi_matrix,
+         fontsize_row = 10, fontsize_col = 14, 
+         cellheight = 10, cellwidth = 80,
+         cluster_rows = F,
+         display_numbers = TRUE,
+         cluster_cols = F,
+         show_rownames = TRUE,
+         labels_row = Casgoiede$gene_id,
+         main = "",
+         border_color = "NA")
+dev.off()
+```
 
 ```{r }
 rxlr <- pcrxlr$gene_id
@@ -526,28 +561,42 @@ rxlrede <- earlydetected[earlydetected$gene_id %in% rxlr, ]
 rxlrmde <- middetected[middetected$gene_id %in% rxlr, ]
 rxlrlde <- latedetected[latedetected$gene_id %in% rxlr, ]
 
-data_matrix <- matrix(
+rxlr_matrix <- matrix(
   c(rxlrede$log2FoldChange, rxlrmde$log2FoldChange, rxlrlde$log2FoldChange),
   nrow = length(rxlrede$log2FoldChange),
   ncol = 3,
   byrow = FALSE
 )
 
-rownames(data_matrix) <- rxlrede$gene_id
-colnames(data_matrix) <- c("Early", "Middle", "Late")
+rxlr_matrixlabel <- matrix(
+  c(rxlrede$significant, rxlrmde$significant, rxlrlde$significant),
+  nrow = length(rxlrede$significant),
+  ncol = 3,
+  byrow = FALSE
+)
+
+rownames(rxlr_matrix) <- rxlrede$gene_id
+colnames(rxlr_matrix) <- c("Early", "Middle", "Late")
+
+rownames(rxlr_matrixlabel) <- rxlrede$gene_id
+colnames(rxlr_matrixlabel) <- c("Early", "Middle", "Late")
 
 filename <- 
-png("RxLR_Log2Fold.png", width = 6400, height = 6400, pointsize = 10, res = 600)
+png("RxLR_Log2Fold_numbers.png", width = 3600, height = 6400, res = 600)
 
 # Create the heatmap with row labels
-pheatmap(data_matrix,
-         fontsize_row = 8, fontsize_col = 8, 
-         cellheight = 8, cellwidth = 80,
+pheatmap(rxlr_matrix,
+         fontsize_row = 10, fontsize_col = 14, 
+         cellheight = 10, cellwidth = 80,
          cluster_rows = TRUE,
+         treeheight_row = 0,
+         fontsize_number = 10,
+         display_numbers = rxlr_matrixlabel,
          cluster_cols = FALSE,
          show_rownames = TRUE,
          labels_row = rxlrede$gene_id,
-         main = "RxLR")
+         main = "RxLR",
+         border_color = "NA")
 dev.off()
 
 ```
@@ -556,74 +605,44 @@ dev.off()
 #IUM83_10648 rxlr nudix
 
 ```{r}
-
-crn <- pccrn$gene_id
-crn.de <- dds.df[dds.df$gene_id %in% crn, ]
-rownames(crn.de) <- crn.de$gene_id
-crn.de$gene_id <- NULL
-
-
-png("CRN_normalized.png", width = 6400, height = 6400, pointsize = 10, res = 600)
-
-crnpmh <- pheatmap(crn.de,  scale = "row",
-         cluster_rows = TRUE, cluster_cols = F,
-         display_numbers = F, 
-         fontsize_row = 8, fontsize_col = 8, 
-         annotation_col = col_ann,
-         show_colnames = FALSE,
-         cellheight = 8, cellwidth = 40,
-         main = "CRN")
-dev.off()
-```
-
-```{r}
 crnlog <- pccrn$gene_id
 
 crnede <- earlydetected[earlydetected$gene_id %in% crnlog, ]
 crnmde <- middetected[middetected$gene_id %in% crnlog, ]
 crnlde <- latedetected[latedetected$gene_id %in% crnlog, ]
 
-crn.matrix <- matrix(
+crn_matrix <- matrix(
   c(crnede$log2FoldChange, crnmde$log2FoldChange, crnlde$log2FoldChange),
   nrow = length(crnede$log2FoldChange),
   ncol = 3,
   byrow = FALSE
 )
 
-rownames(crn.matrix) <- crnede$gene_id
-colnames(crn.matrix) <- c("Early", "Middle", "Late")
+crn_matrixlabel <- matrix(
+  c(crnede$significant, crnmde$significant, crnlde$significant),
+  nrow = length(crnede$significant),
+  ncol = 3,
+  byrow = FALSE
+)
 
-png("CRN_Log2Fold.png", width = 6400, height = 6400, pointsize = 10, res = 600)
+rownames(crn_matrix) <- crnede$gene_id
+colnames(crn_matrix) <- c("Early", "Middle", "Late")
+
+png("CRN_Log2Fold_numbers.png", width = 3600, height = 6400, res = 600)
 
 # Create the heatmap with row labels
-pheatmap(crn.matrix,
-         fontsize_row = 8, fontsize_col = 8, 
-         cellheight = 8, cellwidth = 80,
+pheatmap(crn_matrix,
+         fontsize_row = 10, fontsize_col = 14, 
+         cellheight = 10, cellwidth = 80,
          cluster_rows = TRUE,
+         treeheight_row = 0,
+         fontsize_number = 10,
          cluster_cols = FALSE,
+         display_numbers = crn_matrixlabel,
          show_rownames = TRUE,
          labels_row = crnede$gene_id,
-         main = "CRN")
-dev.off()
-```
-
-```{r}
-
-nlp <- pcnlp$gene_id
-nlp.de <- dds.df[dds.df$gene_id %in% nlp, ]
-rownames(nlp.de) <- nlp.de$gene_id
-nlp.de$gene_id <- NULL
-
-png("NLP_mormalized.png", width = 6400, height = 6400, pointsize = 10, res = 600)
-
-nlpphm <- pheatmap(nlp.de,  scale = "row",
-         cluster_rows = TRUE, cluster_cols = F,
-         display_numbers = F, 
-         fontsize_row = 8, fontsize_col = 8, 
-         annotation_col = col_ann,
-         show_colnames = FALSE,
-         cellheight = 8, cellwidth = 40,
-         main = "NLP")
+         main = "CRN",
+         border_color = "NA")
 dev.off()
 ```
 
@@ -634,27 +653,37 @@ nlpede <- earlydetected[earlydetected$gene_id %in% nlplog, ]
 nlpmde <- middetected[middetected$gene_id %in% nlplog, ]
 nlplde <- latedetected[latedetected$gene_id %in% nlplog, ]
 
-nlp.matrix <- matrix(
+nlp_matrix <- matrix(
   c(nlpede$log2FoldChange, nlpmde$log2FoldChange, nlplde$log2FoldChange),
   nrow = length(nlpede$log2FoldChange),
   ncol = 3,
   byrow = FALSE
 )
 
-rownames(nlp.matrix) <- nlpede$gene_id
-colnames(nlp.matrix) <- c("Early", "Middle", "Late")
+nlp_matrixlabel <- matrix(
+  c(nlpede$significant, nlpmde$significant, nlplde$significant),
+  nrow = length(nlpede$significant),
+  ncol = 3,
+  byrow = FALSE
+)
+rownames(nlp_matrix) <- nlpede$gene_id
+colnames(nlp_matrix) <- c("Early", "Middle", "Late")
 
-png("NLP_Log2Fold.png",  width = 6400, height = 6400, pointsize = 10, res = 600)
+png("NLP_Log2Fold_numbers.png",  width = 3600, height = 6400, res = 600)
 
 # Create the heatmap with row labels
-pheatmap(nlp.matrix,
-         fontsize_row = 8, fontsize_col = 8, 
-         cellheight = 8, cellwidth = 80,
+pheatmap(nlp_matrix,
+         fontsize_row = 10, fontsize_col = 14, 
+         cellheight = 10, cellwidth = 80,
          cluster_rows = TRUE,
+         treeheight_row = 0,
+         fontsize_number = 10,
          cluster_cols = FALSE,
+         display_numbers = nlp_matrixlabel,
          show_rownames = TRUE,
-         labels_row = crnede$gene_id,
-         main = "NLP")
+         labels_row = nlpede$gene_id,
+         main = "NLP",
+         border_color = "NA")
 dev.off()
 ```
 
@@ -668,27 +697,37 @@ pfamede <- earlydetected[earlydetected$gene_id %in% pfamlog, ]
 pfammde <- middetected[middetected$gene_id %in% pfamlog, ]
 pfamlde <- latedetected[latedetected$gene_id %in% pfamlog, ]
 
-pfam.matrix <- matrix(
+pfam_matrix <- matrix(
   c(pfamede$log2FoldChange, pfammde$log2FoldChange, pfamlde$log2FoldChange),
   nrow = length(pfamede$log2FoldChange),
   ncol = 3,
   byrow = FALSE
 )
 
-rownames(pfam.matrix) <- pfamede$gene_id
-colnames(pfam.matrix) <- c("Early", "Middle", "Late")
+pfam_matrixlabel <- matrix(
+  c(pfamede$significant, pfammde$significant, pfamlde$significant),
+  nrow = length(pfamede$significant),
+  ncol = 3,
+  byrow = FALSE
+)
+rownames(pfam_matrix) <- pfamede$gene_id
+colnames(pfam_matrix) <- c("Early", "Middle", "Late")
 
-png("Elicitin_Log2Fold.png", width = 6400, height = 6400, pointsize = 10, res = 600)
+png("Elicitin_Log2Fold_numbers.png", width = 3600, height = 6400, res = 600)
 
 # Create the heatmap with row labels
-pheatmap(pfam.matrix,
-         fontsize_row = 5, fontsize_col = 5, 
-         cellheight = 5, cellwidth = 80,
+pheatmap(pfam_matrix,
+         fontsize_row = 10, fontsize_col = 14, 
+         cellheight = 10, cellwidth = 80,
          cluster_rows = TRUE,
+         treeheight_row = 0,
+         fontsize_number = 10,
          cluster_cols = FALSE,
+         display_numbers = pfam_matrixlabel,
          show_rownames = TRUE,
          labels_row = pfamede$gene_id,
-         main = "Elicitin")
+         main = "Elicitin",
+         border_color = "NA")
 dev.off()
 
 ```
@@ -779,15 +818,6 @@ GOleup <- run_enrichment(leup, genesets, bg)
 rownames(GOleup) <- NULL
 GOledn <- run_enrichment(ledn, genesets, bg)
 rownames(GOledn) <- NULL
-```
-
-```{r}
-#GOeeup %>% kbl(caption="GO terms Early upregulated secreted") %>%   kable_paper("hover", full_width = F)
-#GOeedn %>% kbl(caption="GO terms Early downregulated secreted") %>%   kable_paper("hover", full_width = F)
-#GOmeup %>% kbl(caption="GO terms Mid upregulated secreted") %>%   kable_paper("hover", full_width = F)
-#GOmedn %>% kbl(caption="GO terms Mid downregulated secreted") %>%   kable_paper("hover", full_width = F)
-#GOleup %>% kbl(caption="GO terms Late upregulated secreted") %>%   kable_paper("hover", full_width = F)
-#GOledn %>% kbl(caption="GO terms Late downregulated secreted") %>%   kable_paper("hover", full_width = F)
 ```
 
 ```{r, early secreted smear}
