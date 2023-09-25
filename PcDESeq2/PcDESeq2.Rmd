@@ -3,8 +3,8 @@ title: "PcDESeq2"
 author: "BWSchroeter"
 date: "2023-05-22"
 output:
-  word_document: default
   html_document: default
+  word_document: default
 ---
 
 ```{r, load libraries, include=FALSE}
@@ -219,110 +219,34 @@ col_ann <- data.frame(col_ann)
 col_ann$Stage <- as.factor(col_ann$Stage)
 col_ann <- col_ann[order(col_ann$Stage),]
 col_ann$sample_ID <- NULL
+
+#remove samples to show only stage in figure
+#col_ann$Sample <- NULL
+
 head(col_ann, 12)
 
 ```
 
+```{r}
+# function to save tables landscape
+sect_properties <- prop_section(
+  page_size = page_size(
+    orient = "landscape",
+    width = 8.7, height = 11.7
+  ),
+  type = "continuous",
+  page_margins = page_mar()
+)
+```
+
 ```{r, Early summary}
-res_early_vs_vegetative <- results(dds, contrast = c("condition", "18h", "0h"))
+res_early_vs_vegetative <- results(dds, alpha=0.05, contrast = c("condition", "18h", "0h"))
 summary(res_early_vs_vegetative)
 (res_early_vs_vegetative)
 ```
 
 ```{r, Top 50 most significant genes based on p-value - Early}
 top_genes_early <- head(res_early_vs_vegetative[order(res_early_vs_vegetative$pvalue), ], 50)
-
-top_gene_expression_early.id <- as.data.frame(top_genes_early)
-top_gene_expression_early.id$gene_id <- rownames(top_gene_expression_early.id)
-top_gene_expression_early.id <- dplyr::right_join(pc.annotations, top_gene_expression_early.id, by = 'gene_id') %>%
-  arrange(padj)
-
-view(top_gene_expression_early.id)
-
-# Extract the expression values for the top genes
-top_gene_expression_early <- assay(dds)[rownames(top_genes_early), ]
-
-# Extract the expression values for the top genes and select columns 1 to 6
-top_gene_expression_early <- top_gene_expression_early[, 1:6]
-
-# Create a matrix of log2-transformed expression values
-log2_expression_early <- log2(top_gene_expression_early + 1)
-
-png(filename = "../Figures/Early_pheatmap-scaledl2fc.png", width = 4800, height = 4800, pointsize = 10, res = 600)
-
-pheatmap(top_gene_expression_early, scale = "row",
-         cluster_rows = T, cluster_cols = T,
-         display_numbers = F, 
-         fontsize_row = 8, fontsize_col = 8, 
-         annotation_col = col_ann,
-         show_colnames = FALSE,
-         cellheight = 8, cellwidth = 40,
-         main = "Top 50 Genes by p-value (Early)")
-
-dev.off()
-
-```
-
-
-
-```{r, Early volcano padj}
-# early DE 
-ede <- as.data.frame(res_early_vs_vegetative[order(res_early_vs_vegetative$padj), ])
-# early significant 
-edesig <- subset(ede, padj < 0.05)
-
-edeup_dn <- subset(ede, (log2FoldChange > 2 | log2FoldChange < -2) & padj < 0.05)
-
-edeup <- rownames(subset(ede, log2FoldChange > 2 & padj < 0.05))
-ededn <- rownames(subset(ede, log2FoldChange < -2 & padj < 0.05))
-# Calculate the gene counts
-EDEUP <- length(edeup)
-EDEDN <- length(ededn)
-
-SUBHEADER <- paste(EDEUP, "Up-regulated genes ,", EDEDN, " Down-regulated genes")
-
-evol_df <- data.frame(
-  padj = ede$padj,
-  log2FoldChange = ede$log2FoldChange,
-  baseMean = ede$baseMean,
-  gene_id = rownames(ede)
-  )
-etop_genes <- head(evol_df[order(evol_df$padj), ], 50)
-
-png(filename = "../Figures/EarlyDEvolcano.png", width = 4800, height = 4800, pointsize = 10, res = 600)
-
-ggplot(evol_df, aes(x = log2FoldChange, y = -log10(padj))) +
-  geom_point(color = "black", alpha = 0.5, size = 2, shape = 19) +
-  geom_point(data = edesig, aes(color = "grey"), size = 2, shape = 19) +
-  geom_point(data = edeup_dn, aes(color = "significantly expressed"), size = 2, shape = 19) +
-  geom_text(data = subset(etop_genes, baseMean > 1000), aes(label = gene_id),
-         hjust = -0.1, vjust = 0.1, color = "black", size = 3, angle = -45) +
-         labs(x = "log2foldchange", y = "log10 p-value") +
-  scale_color_manual(values = c("significantly expressed" = "turquoise"),
-                     name = "") +
-  theme_bw() +
-  theme(axis.line = element_line(color = "black"),
-        panel.border = element_rect(color = "black"),
-        panel.grid.major = element_line(color = "grey"),  
-        panel.grid.minor = element_blank(),
-        legend.position = c(0.05, 0.99),  
-        legend.justification = c(0, 1),  
-        legend.background = element_rect(fill = NA, size = 0.5),
-        legend.key.size = unit(1, "lines")) +
-  ggtitle(expression(paste(italic("Phytophthora cinnamomi"), " gene expression during early interaction"))) +
-  labs(subtitle = SUBHEADER) +
-  theme(plot.title = element_text(face = "bold", size = 16)) 
-
-dev.off()
-```
-
-```{r, Top 50 most significant genes based on p-value/baseMean - Early}
-top_genes_early <- as.data.frame(res_early_vs_vegetative[order(res_early_vs_vegetative$pvalue), ])
-
-top_genes_early <- top_genes_early %>%
-  dplyr::filter(baseMean >= 1000) %>%
-  arrange(pvalue) %>%
-  head(50)
 
 top_gene_expression_early.id <- as.data.frame(top_genes_early)
 top_gene_expression_early.id$gene_id <- rownames(top_gene_expression_early.id)
@@ -338,56 +262,22 @@ top_gene_expression_early <- top_gene_expression_early[, 1:6]
 # Create a matrix of log2-transformed expression values
 log2_expression_early <- log2(top_gene_expression_early + 1)
 
-png(filename = "../Figures/Early_pheatmap-scaledl2fc2.png", width = 4800, height = 4800, pointsize = 10, res = 600)
+png(filename = "../Figures/Early_pheatmap-scaledl2fc.png", width = 3600, height = 6400, res = 600)
 
-pheatmap(top_gene_expression_early, scale = "row",
-         cluster_rows = T, cluster_cols = T,
-         display_numbers = F, 
-         fontsize_row = 8, fontsize_col = 8, 
+deph1 <- pheatmap(top_gene_expression_early, 
+         scale = "row",
+         cluster_rows = TRUE,
+         treeheight_row = 0,
+         fontsize_number = 16, 
          annotation_col = col_ann,
-         show_colnames = FALSE,
-         cellheight = 8, cellwidth = 40,
-         main = "Top 50 Genes by p-value (Early)")
+         show_colnames = TRUE,
+         show_rownames = FALSE,
+         fontsize_col = 14,
+         cellheight = 10, cellwidth = 40,
+         main = "Early interaction")
 
 dev.off()
-```
-```{r}
-# function to save tables landscape
-sect_properties <- prop_section(
-  page_size = page_size(
-    orient = "landscape",
-    width = 8.7, height = 11.7
-  ),
-  type = "continuous",
-  page_margins = page_mar()
-)
-```
 
-```{r}
-earlydeseqtable <- head(top_gene_expression_early.id, 10)
-
-# Order columns logically 
-earlydeseqtable <- earlydeseqtable %>% 
-  dplyr::select(c(gene_id, protein_id, product, GO_terms, baseMean, log2FoldChange, padj))
-
-earlydeseqtable$baseMean <- round(earlydeseqtable$baseMean)
-earlydeseqtable$log2FoldChange <- round(earlydeseqtable$log2FoldChange, 2)
-earlydeseqtable$padj <- as.numeric(earlydeseqtable$padj)
-# Format the 'padj' column to scientific notation with two decimal places
-earlydeseqtable$padj <- sprintf("%.2e", earlydeseqtable$padj)
-
-# Rename columns 
-colnames(earlydeseqtable) <- c("Gene name", "Protein name", "Product", "GO term", "baseMean", "log2FoldChange", "padj")
-
-view(earlydeseqtable)
-
-earlydeseqtable <-  flextable(earlydeseqtable) %>%
-  theme_booktabs() %>%
-  align(align = "center", part = c("all"))
-
-print(earlydeseqtable)
-
-#save_as_docx(earlydeseqtable, path =  "/mnt/data/barry/projects/Schroeter_Pcinnamomi/sequencing_stats/earlydeseqtable.docx", pr_section = sect_properties)
 ```
 
 ```{r, Early volcano basemean}
@@ -395,6 +285,11 @@ print(earlydeseqtable)
 ede <- as.data.frame(res_early_vs_vegetative[order(res_early_vs_vegetative$padj), ])
 # early significant 
 edesig <- subset(ede, padj < 0.05)
+
+top_genes_ede <- edesig %>%
+  dplyr::filter(baseMean >= 1000) %>%
+  arrange(pvalue) %>%
+  head(50)
 
 edeup_dn <- subset(ede, (log2FoldChange > 2 | log2FoldChange < -2) & padj < 0.05)
 
@@ -407,12 +302,13 @@ EDEDN <- length(ededn)
 SUBHEADER <- paste(EDEUP, "Up-regulated genes ,", EDEDN, " Down-regulated genes")
 
 evol_df <- data.frame(
-  padj = ede$padj,
-  log2FoldChange = ede$log2FoldChange,
-  baseMean = ede$baseMean,
-  gene_id = rownames(ede)
+  padj = top_genes_ede$padj,
+  log2FoldChange = top_genes_ede$log2FoldChange,
+  baseMean = top_genes_ede$baseMean,
+  gene_id = rownames(top_genes_ede)
   )
-etop_genes <- head(evol_df[order(evol_df$padj), ], 10)
+etop_genes <- head(evol_df[order(evol_df$padj), ], 10) %>%
+  mutate(Rank = row_number())
 
 png(filename = "../Figures/EarlyDEvolcano2.png", width = 4800, height = 4800, pointsize = 10, res = 600)
 
@@ -420,8 +316,8 @@ ggplot(evol_df, aes(x = log2FoldChange, y = -log10(padj))) +
   geom_point(color = "black", alpha = 0.5, size = 2, shape = 19) +
   geom_point(data = edesig, aes(color = "grey"), size = 2, shape = 19) +
   geom_point(data = edeup_dn, aes(color = "significantly expressed"), size = 2, shape = 19) +
-  geom_text(data = subset(etop_genes, baseMean > 1000), aes(label = gene_id),
-         hjust = -0.1, vjust = 0.1, color = "black", size = 3, angle = -45) +
+  geom_text(data = subset(etop_genes, baseMean > 1000), aes(label = Rank),
+         hjust = 0.5, vjust = 0.5, color = "black", size = 3) +
          labs(x = "log2foldchange", y = "log10 p-value") +
   scale_color_manual(values = c("significantly expressed" = "turquoise"),
                      name = "") +
@@ -440,29 +336,44 @@ ggplot(evol_df, aes(x = log2FoldChange, y = -log10(padj))) +
 
 dev.off()
 ```
-
 ```{r}
-#knitr::include_graphics("../Figures/Early_pheatmap-scaledl2fc.png")
-#knitr::include_graphics("../Figures/Early_pheatmap-scaledl2fcbaseMean.png")
-#knitr::include_graphics("../Figures/EarlyDEvolcano.png")
-#knitr::include_graphics("../Figures/EarlyDEvolcano2.png")
+earlydeseqtable <- dplyr::right_join(gtf.omicsbox, etop_genes, by = 'gene_id') %>%
+  arrange(Rank)
+
+earlydeseqtable <- head(earlydeseqtable, 10)
+
+# Order columns logically 
+earlydeseqtable <- earlydeseqtable %>% 
+  dplyr::select(c(Rank, gene_id, protein_id, product, GO_terms, baseMean, log2FoldChange, padj))
+
+earlydeseqtable$baseMean <- round(earlydeseqtable$baseMean)
+earlydeseqtable$log2FoldChange <- round(earlydeseqtable$log2FoldChange, 2)
+earlydeseqtable$padj <- as.numeric(earlydeseqtable$padj)
+# Format the 'padj' column to scientific notation with two decimal places
+earlydeseqtable$padj <- sprintf("%.2e", earlydeseqtable$padj)
+
+# Rename columns 
+colnames(earlydeseqtable) <- c("Rank", "Gene name", "Protein name", "Product", "GO term", "baseMean", "log2FoldChange", "padj")
+
+earlydeseqtable <-  flextable(earlydeseqtable) %>%
+  theme_booktabs() %>%
+  align(align = "center", part = c("all"))
+
+print(earlydeseqtable)
+
+#save_as_docx(earlydeseqtable, path =  "/mnt/data/barry/projects/Schroeter_Pcinnamomi/sequencing_stats/earlydeseqtable.docx", pr_section = sect_properties)
 ```
 
 ```{r, Middle summary}
 # To compare "Middle" vs "Vegetative"
-res_middle_vs_vegetative <- results(dds, contrast =c ("condition", "30h", "0h"))
+res_middle_vs_vegetative <- results(dds, alpha=0.05, contrast =c ("condition", "30h", "0h"))
 summary(res_middle_vs_vegetative)
 res_middle_vs_vegetative
 ```
 
-```{r, Top 50 most significant genes based on p-value/baseMean - Middle}
-top_genes_mid <- as.data.frame(res_middle_vs_vegetative[order(res_middle_vs_vegetative$pvalue), ])
+```{r, Top 50 most significant genes based on p-value - Middle}
 
-top_genes_mid <- top_genes_mid %>%
-  dplyr::filter(baseMean >= 1000) %>%
-  arrange(pvalue) %>%
-  head(50)
-
+top_genes_mid <- head(res_middle_vs_vegetative[order(res_middle_vs_vegetative$pvalue), ], 50)
 
 top_gene_expression_mid.id <- as.data.frame(top_genes_mid)
 top_gene_expression_mid.id$gene_id <- rownames(top_gene_expression_mid.id)
@@ -478,25 +389,33 @@ top_gene_expression_mid <- assay(dds)[rownames(top_genes_mid), c(1:3, 7:9)]
 # Create a matrix of log2-transformed expression values
 log2_expression_mid <- log2(top_gene_expression_mid + 1)
 
-png(filename = "../Figures/Mid_pheatmap-scaledl2fc.png", width = 4800, height = 4800, pointsize = 10, res = 600)
+png(filename = "../Figures/Mid_pheatmap-scaledl2fc.png", width = 4800, height = 6400, res = 600)
 
-pheatmap(log2_expression_mid,  scale = "row",
-         cluster_rows = TRUE, cluster_cols = T,
-         display_numbers = F, 
-         fontsize_row = 8, fontsize_col = 8, 
+deph2 <- pheatmap(log2_expression_mid,
+         scale = "row",
+         cluster_rows = TRUE,
+         treeheight_row = 0,
+         fontsize_number = 10, 
          annotation_col = col_ann,
-         show_colnames = FALSE,
-         cellheight = 8, cellwidth = 40,
-         main = "Top 50 Genes by p-value (Middle)")
+         show_colnames = TRUE,
+         show_rownames = FALSE,
+         cellheight = 10, cellwidth = 40,
+         main = "Middle interaction"
+         )
 
 dev.off()
 ```
 
 ```{r, middle volcano}
-# late DE 
+# Mid DE 
 mde <- as.data.frame(res_middle_vs_vegetative[order(res_middle_vs_vegetative$padj), ])
-# late significant 
+# Mid significant 
 mdesig <- subset(mde, padj < 0.05)
+
+top_genes_mde <- mdesig %>%
+  dplyr::filter(baseMean >= 1000) %>%
+  arrange(pvalue) %>%
+  head(50)
 
 mdeup_dn <- subset(mde, (log2FoldChange > 2 | log2FoldChange < -2) & padj < 0.05)
 
@@ -512,12 +431,13 @@ midgenesDE <- midgenesDE$gene_id
 SUBHEADER <- paste(MDEUP, "Up-regulated genes ,", MDEDN, " Down-regulated genes")
 
 mvol_df <- data.frame(
-  padj = mde$padj,
-  log2FoldChange = mde$log2FoldChange,
-  baseMean = mde$baseMean,
-  gene_id = rownames(mde)
+  padj = top_genes_mde$padj,
+  log2FoldChange = top_genes_mde$log2FoldChange,
+  baseMean = top_genes_mde$baseMean,
+  gene_id = rownames(top_genes_mde)
   )
-mtop_genes <- head(mvol_df[order(mvol_df$padj), ], 50)
+mtop_genes <- head(mvol_df[order(mvol_df$padj), ], 10) %>%
+  mutate(Rank = row_number())
 
 png(filename = "../Figures/MidDEvolcano.png", width = 4800, height = 4800, pointsize = 10, res = 600)
 
@@ -525,8 +445,8 @@ ggplot(mvol_df, aes(x = log2FoldChange, y = -log10(padj))) +
   geom_point(color = "black", alpha = 0.5, size = 2, shape = 19) +
   geom_point(data = mdesig, aes(color = "detected"), size = 2, shape = 19) +
   geom_point(data = mdeup_dn, aes(color = "significantly expressed"), size = 2, shape = 19) +
-  geom_text(data = subset(mtop_genes, baseMean > 1000), aes(label = gene_id),
-         hjust = -0.1, vjust = 0.1, color = "black", size = 3, angle = -45) +
+  geom_text(data = subset(mtop_genes, baseMean > 1000), aes(label = Rank),
+         hjust = 0.5, vjust = 0.5, color = "black", size = 3) +
          labs(x = "log2foldchange", y = "log10 p-value") +
   scale_color_manual(values = c("significantly expressed" = "turquoise"),
                      name = "") +
@@ -547,11 +467,14 @@ dev.off()
 ```
 
 ```{r}
-middeseqtable <- head(top_gene_expression_mid.id, 10)
+middeseqtable <- dplyr::right_join(gtf.omicsbox, mtop_genes, by = 'gene_id') %>%
+  arrange(Rank)
+
+middeseqtable <- head(middeseqtable, 10)
 
 # Order columns logically 
 middeseqtable <- middeseqtable %>% 
-  dplyr::select(c(gene_id, protein_id, product, GO_terms, baseMean, log2FoldChange, padj))
+  dplyr::select(c(Rank, gene_id, protein_id, product, GO_terms, baseMean, log2FoldChange, padj))
 
 middeseqtable$baseMean <- round(middeseqtable$baseMean)
 middeseqtable$log2FoldChange <- round(middeseqtable$log2FoldChange, 2)
@@ -560,27 +483,25 @@ middeseqtable$padj <- as.numeric(middeseqtable$padj)
 middeseqtable$padj <- sprintf("%.2e", middeseqtable$padj)
 
 # Rename columns 
-colnames(middeseqtable) <- c("Gene name", "Protein name", "Product", "GO term", "baseMean", "log2FoldChange", "padj")
+colnames(middeseqtable) <- c("Rank","Gene name", "Protein name", "Product", "GO term", "baseMean", "log2FoldChange", "padj")
 
-view(middeseqtable)
-
-earlydeseqtable <-  flextable(earlydeseqtable) %>%
+middeseqtable <-  flextable(middeseqtable) %>%
   theme_booktabs() %>%
   align(align = "center", part = c("all"))
 
-print(earlydeseqtable)
+print(middeseqtable)
 
-#save_as_docx(earlydeseqtable, path =  "/mnt/data/barry/projects/Schroeter_Pcinnamomi/sequencing_stats/earlydeseqtable.docx", pr_section = sect_properties)
+#save_as_docx(middeseqtable, path =  "/mnt/data/barry/projects/Schroeter_Pcinnamomi/sequencing_stats/middeseqtable.docx", pr_section = sect_properties)
 ```
 
 ```{r, late summary}
 # To compare "Late" vs "Vegetative"
-res_late_vs_vegetative <- results(dds, contrast = c("condition", "48h", "0h"))
+res_late_vs_vegetative <- results(dds, alpha=0.05, contrast = c("condition", "48h", "0h"))
 summary(res_late_vs_vegetative)
 (res_late_vs_vegetative)
 ```
 
-```{r, late top 50 most significant genes based on p-value }
+```{r, late top 50 most significant genes based on p-value}
 top_genes_late <- head(res_late_vs_vegetative[order(res_late_vs_vegetative$pvalue), ], 50)
 
 top_gene_expression_late.id <- as.data.frame(top_genes_late)
@@ -594,16 +515,18 @@ top_gene_expression_late <- assay(dds)[rownames(top_genes_late), c(1:3, 10:12)]
 # Create a matrix of log2-transformed expression values
 log2_expression_late <- log2(top_gene_expression_late + 1)
 
-png(filename = "../Figures/Late_pheatmap-scaledl2fc.png", width = 4800, height = 4800, pointsize = 10, res = 600)
+png(filename = "../Figures/Late_pheatmap-scaledl2fc.png", width = 4800, height = 6400, res = 600)
 
-pheatmap(log2_expression_late, scale = "row",
-         cluster_rows = TRUE, cluster_cols = T,
-         display_numbers = F, 
-         fontsize_row = 8, fontsize_col = 8, 
+deph3 <- pheatmap(log2_expression_late, 
+         scale = "row",
+         cluster_rows = TRUE,
+         treeheight_row = 0,
+         fontsize_number = 10, 
          annotation_col = col_ann,
-         show_colnames = FALSE,
-         cellheight = 8, cellwidth = 40,
-         main = "Top 50 Genes by p-value (Late)")
+         show_colnames = TRUE,
+         show_rownames = FALSE,
+         cellheight = 10, cellwidth = 40,
+         main = "Late interaction")
        
 dev.off()
 ```
@@ -613,6 +536,11 @@ dev.off()
 lde <- as.data.frame(res_late_vs_vegetative[order(res_late_vs_vegetative$padj), ])
 # late significant 
 ldesig <- subset(lde, padj < 0.05)
+
+top_genes_lde <- ldesig %>%
+  dplyr::filter(baseMean >= 1000) %>%
+  arrange(pvalue) %>%
+  head(50)
 
 ldeup_dn <- subset(lde, (log2FoldChange > 2 | log2FoldChange < -2) & padj < 0.05)
 
@@ -629,12 +557,14 @@ lategenesDE <- lategenesDE$gene_id
 SUBHEADER <- paste(LDEUP, "Up-regulated genes ,", LDEDN, " Down-regulated genes")
 
 lvol_df <- data.frame(
-  padj = lde$padj,
-  log2FoldChange = lde$log2FoldChange,
-  baseMean = lde$baseMean,
-  gene_id = rownames(lde)
+  padj = top_genes_lde$padj,
+  log2FoldChange = top_genes_lde$log2FoldChange,
+  baseMean = top_genes_lde$baseMean,
+  gene_id = rownames(top_genes_lde)
   )
-ltop_genes <- head(lvol_df[order(lvol_df$padj), ], 50)
+
+ltop_genes <- head(lvol_df[order(lvol_df$padj), ], 10) %>%
+  mutate(Rank = row_number())
 
 png(filename = "../Figures/LateDEvolcano.png", width = 4800, height = 4800, pointsize = 10, res = 600)
 
@@ -642,8 +572,8 @@ ggplot(lvol_df, aes(x = log2FoldChange, y = -log10(padj))) +
   geom_point(color = "black", alpha = 0.5, size = 2, shape = 19) +
   geom_point(data = ldesig, aes(color = "grey"), size = 2, shape = 19) +
   geom_point(data = ldeup_dn, aes(color = "significantly expressed"), size = 2, shape = 19) +
-  geom_text(data = subset(ltop_genes, baseMean > 1000), aes(label = gene_id),
-         hjust = -0.1, vjust = 0.1, color = "black", size = 3, angle = -45) +
+  geom_text(data = subset(ltop_genes, baseMean > 1000), aes(label = Rank),
+         hjust = 0.5, vjust = 0.5, color = "black", size = 3) +
          labs(x = "log2foldchange", y = "log10 p-value") +
   scale_color_manual(values = c("significantly expressed" = "turquoise"),
                      name = "") +
@@ -664,51 +594,36 @@ dev.off()
 ```
 
 ```{r}
+latedeqtable <- dplyr::right_join(gtf.omicsbox, ltop_genes, by = 'gene_id') %>%
+  arrange(Rank)
+
+# Order columns logically 
+latedeqtable <- latedeqtable %>% 
+  dplyr::select(c(Rank, gene_id, protein_id, product, GO_terms, baseMean, log2FoldChange, padj))
+
+latedeqtable$baseMean <- round(latedeqtable$baseMean)
+latedeqtable$log2FoldChange <- round(latedeqtable$log2FoldChange, 2)
+latedeqtable$padj <- as.numeric(latedeqtable$padj)
+# Format the 'padj' column to scientific notation with two decimal places
+latedeqtable$padj <- sprintf("%.2e", latedeqtable$padj)
+
+# Rename columns 
+colnames(latedeqtable) <- c("Rank", "Gene name", "Protein name", "Product", "GO term", "baseMean", "log2FoldChange", "padj")
+
+latedeqtable <-  flextable(latedeqtable) %>%
+  theme_booktabs() %>%
+  align(align = "center", part = c("all"))
+
+print(latedeqtable)
+
+#save_as_docx(latedeqtable, path =  "/mnt/data/barry/projects/Schroeter_Pcinnamomi/sequencing_stats/latedeseqtable.docx", pr_section = sect_properties)
+```
+```{r}
 deseqtable <- read.csv("/mnt/data/barry/projects/Schroeter_Pcinnamomi/shared_scripts/finaltable.tsv")
 
 colnames(deseqtable) <- c("gene_id", "Protein name", "Product", "GO BP terms", "GO BP IDs", "GO MF terms", "GO MF IDs", "GO CC terms", "GO CC IDs", "SP, TM", "Effector")
 
 ```
-
-```{r}
-duplicates <- any(duplicated(earlydeseqtable$Gene_name))
-
-# Print the result
-if (duplicates) {
-  cat("The 'Gene name' column contains duplicates.\n")
-} else {
-  cat("The 'Gene name' column does not contain duplicates.\n")
-}
-```
-
-
-```{r}
-earlydeseqtable <- head(top_gene_expression_early.id, 50)
-
-earlydeseqtable <- earlydeseqtable %>% 
-  dplyr::select(c(gene_id, baseMean, log2FoldChange, padj))
-
-earlydeseqtable$baseMean <- round(earlydeseqtable$baseMean)
-earlydeseqtable$log2FoldChange <- round(earlydeseqtable$log2FoldChange, 2)
-earlydeseqtable$padj <- as.numeric(earlydeseqtable$padj)
-# Format the 'padj' column to scientific notation with two decimal places
-earlydeseqtable$padj <- sprintf("%.2e", earlydeseqtable$padj)
-
-earlydeseqtable <-  deseqtable %>%
-  right_join(earlydeseqtable, by = "gene_id")
-
-view(earlydeseqtable)
-
-earlydeseqtable.ft <-  flextable(earlydeseqtable) %>%
-  theme_booktabs() %>%
-  add_header_row(values = c("", "Biological Process", "Molecular Function", "Cellular Component", "Prediction", "Expression values"), colwidths = c(3,2,2,2,2,3)) %>%
-  align(align = "center", part = c("all"))
-
-print(earlydeseqtable.ft)
-
-save_as_docx(earlydeseqtable.ft, path =  "/mnt/data/barry/projects/Schroeter_Pcinnamomi/sequencing_stats/earlydeseqtable.docx", pr_section = sect_properties)
-```
-
 
 ## Session information
 
