@@ -24,6 +24,7 @@ library(clusterProfiler)
 library(patchwork)
 library(ggplot2)
 library(RColorBrewer)
+library("eulerr")
 ```
 
 ```{r, include=FALSE}
@@ -139,6 +140,8 @@ tca <- TCA(design = design, genomicFeature = gene.len,
 ```
 
 ```{r}
+set.seed(4232)
+
 tca <- DBanalysis(tca)
 tca <- DBanalysis(tca, filter.type = "raw", filter.value = 10, samplePassfilter = 3)
 
@@ -167,12 +170,12 @@ p <- timeclustplot(tca, value = "z-score(PRKM)", cols = 3)
 
 ```{r}
 #change this depending on the number of clusters/genes
-p[[1]][["labels"]][["title"]] <- paste0("Cluster 1 - 650 genes")
+p[[1]][["labels"]][["title"]] <- paste0("Cluster 1 - 1005 genes")
 p[[2]][["labels"]][["title"]] <- paste0("Cluster 2 - 858 genes")
 p[[3]][["labels"]][["title"]] <- paste0("Cluster 3 - 2082 genes")
-p[[4]][["labels"]][["title"]] <- paste0("Cluster 4 - 1005 genes")
-p[[5]][["labels"]][["title"]] <- paste0("Cluster 5 - 1460 genes")
-p[[6]][["labels"]][["title"]] <- paste0("Cluster 6 - 1789 genes")
+p[[4]][["labels"]][["title"]] <- paste0("Cluster 4 - 1460 genes")
+p[[5]][["labels"]][["title"]] <- paste0("Cluster 5 - 1789 genes")
+p[[6]][["labels"]][["title"]] <- paste0("Cluster 6 - 650 genes")
 ```
 
 
@@ -213,11 +216,6 @@ cluster_3_genes.id <- deseqtable[deseqtable$gene_id %in% cluster_3_genes, ]
 cluster_4_genes.id <- deseqtable[deseqtable$gene_id %in% cluster_4_genes, ]
 cluster_5_genes.id <- deseqtable[deseqtable$gene_id %in% cluster_5_genes, ]
 cluster_6_genes.id <- deseqtable[deseqtable$gene_id %in% cluster_6_genes, ]
-```
-
-```{r}
-plas_rows <- cluster_1_genes.id[cluster_1_genes.id$Effector == c("Apoplastic effector", "Cytoplasmic effector","Apoplastic/cytoplasmic effector"), ]
-
 ```
 
 ```{r, warning=FALSE}
@@ -376,9 +374,70 @@ dev.off()
 ```{r}
 knitr::include_graphics("../Figures/PcTCA.png")
 ```
-
 ```{r}
 knitr::include_graphics("../Figures/PcTCA_ora.png")
+```
+
+#How many predicted genes are common with effectorP and that share homology to those in in PHI_database?
+
+```{r}
+#import effector table containing both PHI blast and effectorP results 
+effectors <- read_delim("effectortable.tsv", show_col_types = FALSE)
+
+Cluster_labels <- effectors %>% 
+  dplyr::select(c(gene_id, protein_id, product, Prediction, secreted, subject_id))
+
+Cluster_labels <- Cluster_labels %>%
+  mutate(PHI_homology = ifelse(subject_id != "NA", 1, 0),
+         effectorP = ifelse(Prediction != "-" & Prediction != "Non-effector", 1, 0))
+
+phipos <- Cluster_labels[Cluster_labels$PHI_homology == 1, ]
+phipos <- unique(phipos$gene_id)
+
+effectorppos <- Cluster_labels[Cluster_labels$effectorP == 1, ]
+effectorppos <- unique(effectorppos$gene_id)
+
+eprediction <- list("EffectorP"=effectorppos, "PHI_database"=phipos)
+
+png(filename = "../Figures/predictionoverlap.png", width = 3600, height = 3600, res = 600)
+
+plot(euler(eprediction),quantities = TRUE, labels = list(font = 24), main="prediction")
+
+dev.off()
+```
+
+```{r}
+
+
+cluster_1_effector <- Cluster_labels[Cluster_labels$gene_id %in% cluster_1_genes, ]
+
+cluster_1_effector_filtered <- cluster_1_effector %>%
+  filter(PHI_homology == 1 | effectorP == 1)
+
+cluster_2_effector <- Cluster_labels[Cluster_labels$gene_id %in% cluster_2_genes, ]
+
+cluster_2_effector_filtered <- cluster_2_effector %>%
+  filter(PHI_homology == 1 | effectorP == 1)
+
+cluster_3_effector <- Cluster_labels[Cluster_labels$gene_id %in% cluster_3_genes, ]
+
+cluster_3_effector_filtered <- cluster_3_effector %>%
+  filter(PHI_homology == 1 | effectorP == 1)
+
+cluster_4_effector <- Cluster_labels[Cluster_labels$gene_id %in% cluster_4_genes, ]
+
+cluster_4_effector_filtered <- cluster_4_effector %>%
+  filter(PHI_homology == 1 | effectorP == 1)
+
+cluster_5_effector <- Cluster_labels[Cluster_labels$gene_id %in% cluster_5_genes, ]
+
+cluster_5_effector_filtered <- cluster_5_effector %>%
+  filter(PHI_homology == 1 | effectorP == 1) 
+
+cluster_6_effector <- Cluster_labels[Cluster_labels$gene_id %in% cluster_6_genes, ]
+
+cluster_6_effector_filtered <- cluster_6_effector %>%
+  filter(PHI_homology == 1 | effectorP == 1)
 ```
 
 ```{r}
