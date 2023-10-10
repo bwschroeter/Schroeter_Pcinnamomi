@@ -1,0 +1,302 @@
+---
+title: "PcMitch"
+author: "BWSchroeter"
+date: "2023-05-24"
+output: html_document
+---
+
+```{r, lib}
+library("mitch")
+library("stringi")
+library(pheatmap)
+```
+
+```{r, warning=FALSE}
+setwd("../shared_scripts/")
+
+source("../shared_scripts/pcinnamomi_annotations.R", 
+       local = knitr::knit_global())
+
+source("../shared_scripts/detected_pcgenes.R", 
+       local = knitr::knit_global())
+```
+
+```{r}
+# remove genes that don't have Gene Ontology associated with them, but added to X.
+modifiedgmt <- gmt_import("goterms.gmt")
+modifiedgmt <- modifiedgmt[!names(modifiedgmt) == "X."]
+
+genesets <- modifiedgmt
+
+#genesets<-gmt_import("goterms.gmt")
+
+earlydetected <- as.data.frame(res_early_vs_vegetative)
+middetected <- as.data.frame(res_middle_vs_vegetative)
+latedetected <- as.data.frame(res_late_vs_vegetative)
+
+```
+
+```{r,import5}
+# first rearrange cols
+earlymitch <- earlydetected
+earlymitch$MyGeneIDs<-rownames(earlymitch)
+rownames(earlymitch)<-seq(nrow(earlymitch))
+head(earlymitch)
+
+midmitch <- middetected
+midmitch$MyGeneIDs<-rownames(midmitch)
+rownames(midmitch)<-seq(nrow(midmitch))
+head(midmitch)
+
+latemitch <- latedetected
+latemitch$MyGeneIDs<-rownames(latemitch)
+rownames(latemitch)<-seq(nrow(latemitch))
+head(latemitch)
+
+x<-list("Early"=earlymitch,"Mid"=midmitch, "Late"=latemitch)
+y<-mitch_import(x,"DESeq2")
+
+```
+
+```{r,import6}
+# obtain vector of gene names
+genenames<-rownames(earlydetected)
+# create fake accession numbers
+accessions<-paste("Gene0",stri_rand_strings(nrow(earlymitch)*2, 6, pattern = "[0-9]"),sep="")
+accessions<-head(unique(accessions),nrow(earlydetected))
+# create a gene table file that relates gene names to accession numbers
+gt<-data.frame(genenames,accessions)
+
+# now swap gene names for accessions
+earlymitch<-merge(earlydetected,gt,by.x=0,by.y="genenames")
+rownames(earlymitch)<-earlymitch$accessions
+earlymitch2<-earlymitch[,2:5]
+
+midmitch<-merge(middetected,gt,by.x=0,by.y="genenames")
+rownames(midmitch)<-midmitch$accessions
+midmitch2<-midmitch[,2:5]
+
+latemitch<-merge(latedetected,gt,by.x=0,by.y="genenames")
+rownames(latemitch)<-latemitch$accessions
+latemitch2<-latemitch[,2:5]
+
+# now have a peek at the input data before importing
+head(earlymitch2,3)
+head(midmitch2,3)
+head(latemitch2,3)
+head(gt,3)
+x<-list("Early"=earlymitch2,"Middle"=midmitch2, "Late"=latemitch2)
+y<-mitch_import(x,DEtype="DESeq2",geneTable=gt)
+head(y,3)
+```
+
+```{r,calc1,results="hide"}
+# prioritisation by significance
+ressig<-mitch_calc(y,genesets,priority="significance", minsetsize = 5, cores=2)
+```
+
+```{r,calc2}
+# peek at the results
+head(ressig$enrichment_result)
+```
+
+```{r, heatmap Significance}
+SIGterm <- ressig[["enrichment_result"]][["set"]]
+SIGearly <- ressig[["enrichment_result"]][["s.Early"]]
+SIGmiddle <- ressig[["enrichment_result"]][["s.Middle"]]
+SIGlate <- ressig[["enrichment_result"]][["p.Late"]]
+SIGMANOVA <- ressig[["enrichment_result"]][["pMANOVA"]]
+SIGp.adjustMANOVA <- ressig[["enrichment_result"]][["p.adjustMANOVA"]]
+
+SIGmitchheatmap <- data.frame("term" = SIGterm, "Early" = SIGearly, "Middle" = SIGmiddle, "Late" = SIGlate,"MANOVA" = SIGMANOVA, "p.adjustMANOVA" = SIGp.adjustMANOVA)
+topSIG <- head(SIGmitchheatmap, 50)
+
+modifyGOtermfunction <- function(mitchheatmap) {
+  mitchheatmap$term <- gsub("GO\\.", "GO:", mitchheatmap$term)
+  mitchheatmap$term <- gsub("\\.", " ", mitchheatmap$term)
+  mitchheatmap$ontologies <- NA
+  mitchheatmap$ontologies[substr(mitchheatmap$term, 1, 1) == "F"] <- "Molecular function"
+  mitchheatmap$ontologies[substr(mitchheatmap$term, 1, 1) == "C"] <- "Cellular component"
+  mitchheatmap$ontologies[substr(mitchheatmap$term, 1, 1) == "P"] <- "Biological process"
+  mitchheatmap$`GO term` <- substr(mitchheatmap$term, 3, 12)
+  mitchheatmap <- mitchheatmap[complete.cases(mitchheatmap$ontologies), ]
+  mitchheatmap$`new_term` <- substr(mitchheatmap$term, 2, nchar(mitchheatmap$term))
+  return(mitchheatmap)
+}
+
+modifygoheat <- modifyGOtermfunction(topSIG)
+SIGpheatmap <- dplyr::select(modifygoheat, c("new_term", "Early", "Middle", "Late"))
+rownames(SIGpheatmap) <- SIGpheatmap$new_term
+SIGpheatmap <- SIGpheatmap[, -1]
+
+png(filename = "MitchSIG.png", width = 4800, height = 4800, pointsize = 10, res = 600)
+
+pheatmap(SIGpheatmap, 
+         cluster_rows = T, cluster_cols = F,
+         display_numbers = F, 
+         fontsize_row = 8, fontsize_col = 8, 
+         show_colnames = TRUE,
+         cellheight = 8, cellwidth = 40,
+         main = "Mitch Significance")
+dev.off()
+
+```
+
+
+```{r,calc3,results="hide"}
+# prioritisation by effect size
+reseffect<-mitch_calc(y,genesets,priority="effect", minsetsize = 5, cores=2)
+```
+
+```{r,calc4}
+head(reseffect$enrichment_result)
+```
+
+
+
+
+```{r,calc5,results="hide"}
+# prioritisation by SD
+resSD<-mitch_calc(y,genesets,priority="SD", minsetsize = 5, cores=2)
+```
+
+By default, in downstream visualisation steps, charts are made from the top 50 gene sets, but this can be 
+modified using the resrows option.
+
+```{r,calc6,results="hide"}
+head(resSD$enrichment_result)
+```
+
+# reorder heatmaps 
+
+```{r, function to split GO accessions}
+modifyGOtermfunction <- function(mitchheatmap) {
+  mitchheatmap$set <- gsub("GO\\.", "GO:", mitchheatmap$set)
+  mitchheatmap$set <- gsub("\\.", " ", mitchheatmap$set)
+  mitchheatmap$ontologies <- NA
+  mitchheatmap$ontologies[substr(mitchheatmap$set, 1, 1) == "F"] <- "Molecular function"
+  mitchheatmap$ontologies[substr(mitchheatmap$set, 1, 1) == "C"] <- "Cellular component"
+  mitchheatmap$ontologies[substr(mitchheatmap$set, 1, 1) == "P"] <- "Biological process"
+  mitchheatmap$`GO term` <- substr(mitchheatmap$set, 3, 12)
+  mitchheatmap <- mitchheatmap[complete.cases(mitchheatmap$ontologies), ]
+  mitchheatmap$`new_term` <- substr(mitchheatmap$set, 2, nchar(mitchheatmap$set))
+  return(mitchheatmap)
+}
+```
+
+
+```{r, pheatmap Mitch significance, fig.height=12, fig.width=12}
+SIGmitchheatmap <- as.data.frame(head(ressig[["enrichment_result"]], 51))
+
+modifygoheat <- modifyGOtermfunction(SIGmitchheatmap)
+
+sigpheatmap <- dplyr::select(modifygoheat, c("new_term", "s.Early", "s.Middle", "s.Late"))
+colnames(sigpheatmap) <- c("new_term", "Early", "Middle", "Late")
+
+rownames(sigpheatmap) <- sigpheatmap$new_term
+sigpheatmap <- sigpheatmap[, -1]
+
+png(filename = "Mitchsig.png", width = 12, height = 12,units = , res = 600)
+
+pheatmap(as.matrix(sigpheatmap),  
+         cluster_rows = TRUE, cluster_cols = FALSE,
+         display_numbers = FALSE, 
+         fontsize_row = 10, fontsize_col = 14, 
+         show_colnames = TRUE,
+         treeheight_row = 0,
+         cellheight = 10, cellwidth = 80,
+         main = "Significance")
+
+dev.off()
+
+```
+
+```{r, pheatmap Mitch effect, fig.height=12, fig.width=12}
+effectmitchheatmap <- as.data.frame(head(reseffect[["enrichment_result"]], 50))
+
+modifygoheat <- modifyGOtermfunction(effectmitchheatmap)
+
+effectpheatmap <- dplyr::select(modifygoheat, c("new_term", "s.Early", "s.Middle", "s.Late"))
+colnames(effectpheatmap) <- c("new_term", "Early", "Middle", "Late")
+
+rownames(effectpheatmap) <- effectpheatmap$new_term
+effectpheatmap <- effectpheatmap[, -1]
+
+png(filename = "Mitch_effect.png", width = 6400, height = 6400, res = 600)
+
+pheatmap(as.matrix(effectpheatmap),  
+         cluster_rows = TRUE, cluster_cols = FALSE,
+         display_numbers = FALSE, 
+         fontsize_row = 10, fontsize_col = 14, 
+         show_colnames = TRUE,
+         treeheight_row = 0,
+         cellheight = 10, cellwidth = 80,
+         main = "Effect")
+
+dev.off()
+
+```
+
+```{r, pheatmap Mitch SD, fig.height=12, fig.width=12}
+SDmitchheatmap <- as.data.frame(head(resSD[["enrichment_result"]], 50))
+
+modifygoheat <- modifyGOtermfunction(SDmitchheatmap)
+
+SDpheatmap <- dplyr::select(modifygoheat, c("new_term", "s.Early", "s.Middle", "s.Late"))
+colnames(SDpheatmap) <- c("new_term", "Early", "Middle", "Late")
+
+rownames(SDpheatmap) <- SDpheatmap$new_term
+SDpheatmap <- SDpheatmap[, -1]
+
+png(filename = "MitchSD.png", width = 6400, height = 6400, res = 600)
+
+pheatmap(as.matrix(SDpheatmap),    
+         cluster_rows = TRUE, cluster_cols = FALSE,
+         display_numbers = FALSE, 
+         fontsize_row = 10, fontsize_col = 14, 
+         show_colnames = TRUE,
+         treeheight_row = 0,
+         cellheight = 10, cellwidth = 80,
+         main = "SD of s value")
+
+dev.off()
+
+png(filename = "MitchSDbadscale.png", width = 6400, height = 6400, res = 600)
+
+pheatmap(as.matrix(SDpheatmap), scale = "row",   
+         cluster_rows = TRUE, cluster_cols = FALSE,
+         display_numbers = FALSE, 
+         fontsize_row = 10, fontsize_col = 14, 
+         show_colnames = TRUE,
+         treeheight_row = 0,
+         cellheight = 10, cellwidth = 80,
+         main = "SD of s value")
+
+dev.off()
+```
+
+## Generate a HTML report
+The HTML reports contain several plots as raster images and interactive charts
+which are useful as a first-pass visualisation. These can be generated like
+this:
+
+```{r,report,results="hide"}
+mitch_report(ressig,"PcSIGNIFICANCEreport2.html")
+mitch_report(reseffect,"PcEFFECTreport2.html")
+mitch_report(resSD,"PcSDreport2.html")
+
+```
+
+## Generate high resolution plots
+In case you want the charts in PDF format, for example for publications, these
+can be generated as such:
+
+```{r,plots,results="hide"}
+#mitch_plots(resSD,outfile="Pccharts.pdf")
+```
+
+
+
+
+
+
