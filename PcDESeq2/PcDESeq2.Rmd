@@ -75,6 +75,8 @@ nrow(dds)
 dds <- dds[rowMeans(counts(dds)) >10,]
 nrow(dds)
 
+dds <- estimateSizeFactors(dds)
+
 ```
 
 ```{r}
@@ -83,7 +85,7 @@ head(assay(vsd), 3)
 
 rld <- rlog(dds, blind = FALSE)
 head(assay(rld), 3)
-                    
+
 ```
 
 ```{r}
@@ -159,6 +161,11 @@ pheatmap(sampleDistMatrix,
 ```
 
 ```{r}
+plotPCA(vsd, intgroup = "condition", returnData = FALSE)
+```
+
+
+```{r}
 
 PCA <- plotPCA(vsd, c("timepoint", "sampleNames"), returnData = TRUE)
 percentVar <- round(100 * attr(PCA, "percentVar"))
@@ -205,7 +212,7 @@ dev.off()
 ```
 
 ```{r}
-dds$condition <- relevel(dds$timepoint, ref = "0h")
+dds$condition <- relevel(dds$timepoint, ref = "0hpi")
 
 dds <- DESeq(dds)
 
@@ -239,10 +246,15 @@ sect_properties <- prop_section(
 )
 ```
 
+"It is therefore desirable to include the threshold in the statistical testing procedure directly, i.e., not to filter post hoc on a reported fold-change estimate, but rather to evaluate statistically directly whether there is sufficient evidence that the LFC is above the chosen threshold." - Love, M.I., Huber, W. & Anders, S. Moderated estimation of fold change and dispersion for RNA-seq data with DESeq2. Genome Biol 15, 550 (2014). https://doi.org/10.1186/s13059-014-0550-8
+
+
 ```{r, Early summary}
-res_early_vs_vegetative <- results(dds, alpha=0.05, contrast = c("condition", "18h", "0h"))
+
+res_early_vs_vegetative <- results(dds, alpha=0.05, lfcThreshold = 1, contrast = c("condition", "18hpi", "0hpi"))
 summary(res_early_vs_vegetative)
 (res_early_vs_vegetative)
+
 ```
 
 ```{r, Top 50 most significant genes based on p-value - Early}
@@ -260,9 +272,9 @@ top_gene_expression_early <- assay(dds)[rownames(top_genes_early), ]
 top_gene_expression_early <- top_gene_expression_early[, 1:6]
 
 # Create a matrix of log2-transformed expression values
-log2_expression_early <- log2(top_gene_expression_early + 1)
+#log2_expression_early <- log2(top_gene_expression_early + 1)
 
-png(filename = "../Figures/Early_pheatmap-scaledl2fc.png", width = 3600, height = 6400, res = 600)
+png(filename = "../Figures/Earlynormscaled.png", width = 3600, height = 6400, res = 600)
 
 deph1 <- pheatmap(top_gene_expression_early, 
          scale = "row",
@@ -284,6 +296,7 @@ dev.off()
 # early DE 
 ede <- as.data.frame(res_early_vs_vegetative[order(res_early_vs_vegetative$padj), ])
 # early significant 
+
 edesig <- subset(ede, padj < 0.05)
 
 top_genes_ede <- edesig %>%
@@ -291,10 +304,10 @@ top_genes_ede <- edesig %>%
   arrange(pvalue) %>%
   head(50)
 
-edeup_dn <- subset(ede, (log2FoldChange > 2 | log2FoldChange < -2) & padj < 0.05)
+edeup_dn <- subset(ede, (log2FoldChange > 1 | log2FoldChange < -1) & padj < 0.05)
 
-edeup <- rownames(subset(ede, log2FoldChange > 2 & padj < 0.05))
-ededn <- rownames(subset(ede, log2FoldChange < -2 & padj < 0.05))
+edeup <- rownames(subset(ede, log2FoldChange > 1 & padj < 0.05))
+ededn <- rownames(subset(ede, log2FoldChange < -1 & padj < 0.05))
 # Calculate the gene counts
 EDEUP <- length(edeup)
 EDEDN <- length(ededn)
@@ -314,12 +327,12 @@ png(filename = "../Figures/EarlyDEvolcano2.png", width = 4800, height = 4800, po
 
 ggplot(evol_df, aes(x = log2FoldChange, y = -log10(padj))) +
   geom_point(color = "black", alpha = 0.5, size = 2, shape = 19) +
-  geom_point(data = edesig, aes(color = "grey"), size = 2, shape = 19) +
-  geom_point(data = edeup_dn, aes(color = "significantly expressed"), size = 2, shape = 19) +
-  geom_text(data = subset(etop_genes, baseMean > 1000), aes(label = Rank),
+  geom_point(data = ede, aes(color = "detected genes"), size = 2, shape = 19) +
+  geom_point(data = edeup_dn, aes(color = "significantly expressed genes"), size = 2, shape = 19) +
+  geom_text(data = subset(etop_genes), aes(label = Rank),
          hjust = 0.5, vjust = 0.5, color = "black", size = 3) +
          labs(x = "log2foldchange", y = "log10 p-value") +
-  scale_color_manual(values = c("significantly expressed" = "turquoise"),
+  scale_color_manual(values = c("significantly expressed genes" = "turquoise", "detected genes" = "grey"),
                      name = "") +
   theme_bw() +
   theme(axis.line = element_line(color = "black"),
@@ -336,6 +349,7 @@ ggplot(evol_df, aes(x = log2FoldChange, y = -log10(padj))) +
 
 dev.off()
 ```
+
 ```{r}
 earlydeseqtable <- dplyr::right_join(gtf.omicsbox, etop_genes, by = 'gene_id') %>%
   arrange(Rank)
@@ -366,7 +380,7 @@ print(earlydeseqtable)
 
 ```{r, Middle summary}
 # To compare "Middle" vs "Vegetative"
-res_middle_vs_vegetative <- results(dds, alpha=0.05, contrast =c ("condition", "30h", "0h"))
+res_middle_vs_vegetative <- results(dds, alpha=0.05, lfcThreshold = 1, contrast =c ("condition", "30hpi", "0hpi"))
 summary(res_middle_vs_vegetative)
 res_middle_vs_vegetative
 ```
@@ -387,20 +401,21 @@ top_gene_expression <- assay(dds)[rownames(top_genes_mid), ]
 top_gene_expression_mid <- assay(dds)[rownames(top_genes_mid), c(1:3, 7:9)]
 
 # Create a matrix of log2-transformed expression values
-log2_expression_mid <- log2(top_gene_expression_mid + 1)
+#log2_expression_mid <- log2(top_gene_expression_mid + 1)
 
-png(filename = "../Figures/Mid_pheatmap-scaledl2fc.png", width = 4800, height = 6400, res = 600)
+png(filename = "../Figures/Midnormscaled.png", width = 3600, height = 6400, res = 600)
 
-deph2 <- pheatmap(log2_expression_mid,
+deph2 <- pheatmap(top_gene_expression_mid,
          scale = "row",
          cluster_rows = TRUE,
          treeheight_row = 0,
-         fontsize_number = 10, 
+         fontsize_number = 16, 
          annotation_col = col_ann,
          show_colnames = TRUE,
          show_rownames = FALSE,
+         fontsize_col = 14,
          cellheight = 10, cellwidth = 40,
-         main = "Middle interaction"
+         main = "Mid interaction"
          )
 
 dev.off()
@@ -417,10 +432,10 @@ top_genes_mde <- mdesig %>%
   arrange(pvalue) %>%
   head(50)
 
-mdeup_dn <- subset(mde, (log2FoldChange > 2 | log2FoldChange < -2) & padj < 0.05)
+mdeup_dn <- subset(mde, (log2FoldChange > 1 | log2FoldChange < -1) & padj < 0.05)
 
-mdeup <- rownames(subset(mde, log2FoldChange > 2 & padj < 0.05))
-mdedn <- rownames(subset(mde, log2FoldChange < -2 & padj < 0.05))
+mdeup <- rownames(subset(mde, log2FoldChange > 1 & padj < 0.05))
+mdedn <- rownames(subset(mde, log2FoldChange < -1 & padj < 0.05))
 # Calculate the gene counts
 MDEUP <- length(mdeup)
 MDEDN <- length(mdedn)
@@ -443,12 +458,12 @@ png(filename = "../Figures/MidDEvolcano.png", width = 4800, height = 4800, point
 
 ggplot(mvol_df, aes(x = log2FoldChange, y = -log10(padj))) +
   geom_point(color = "black", alpha = 0.5, size = 2, shape = 19) +
-  geom_point(data = mdesig, aes(color = "detected"), size = 2, shape = 19) +
-  geom_point(data = mdeup_dn, aes(color = "significantly expressed"), size = 2, shape = 19) +
+  geom_point(data = mde, aes(color = "detected genes"), size = 2, shape = 19) +
+  geom_point(data = mdeup_dn, aes(color = "significantly expressed genes"), size = 2, shape = 19) +
   geom_text(data = subset(mtop_genes, baseMean > 1000), aes(label = Rank),
          hjust = 0.5, vjust = 0.5, color = "black", size = 3) +
          labs(x = "log2foldchange", y = "log10 p-value") +
-  scale_color_manual(values = c("significantly expressed" = "turquoise"),
+  scale_color_manual(values = c("significantly expressed genes" = "turquoise", "detected genes" = "grey"),
                      name = "") +
   theme_bw() +
   theme(axis.line = element_line(color = "black"),
@@ -496,7 +511,7 @@ print(middeseqtable)
 
 ```{r, late summary}
 # To compare "Late" vs "Vegetative"
-res_late_vs_vegetative <- results(dds, alpha=0.05, contrast = c("condition", "48h", "0h"))
+res_late_vs_vegetative <- results(dds, alpha=0.05, lfcThreshold = 1, contrast = c("condition", "48hpi", "0hpi"))
 summary(res_late_vs_vegetative)
 (res_late_vs_vegetative)
 ```
@@ -515,16 +530,17 @@ top_gene_expression_late <- assay(dds)[rownames(top_genes_late), c(1:3, 10:12)]
 # Create a matrix of log2-transformed expression values
 log2_expression_late <- log2(top_gene_expression_late + 1)
 
-png(filename = "../Figures/Late_pheatmap-scaledl2fc.png", width = 4800, height = 6400, res = 600)
+png(filename = "../Figures/Latenormscaled.png", width = 3600, height = 6400, res = 600)
 
-deph3 <- pheatmap(log2_expression_late, 
+deph3 <- pheatmap(log2_expression_late,
          scale = "row",
          cluster_rows = TRUE,
          treeheight_row = 0,
-         fontsize_number = 10, 
+         fontsize_number = 16, 
          annotation_col = col_ann,
          show_colnames = TRUE,
          show_rownames = FALSE,
+         fontsize_col = 14,
          cellheight = 10, cellwidth = 40,
          main = "Late interaction")
        
@@ -542,10 +558,10 @@ top_genes_lde <- ldesig %>%
   arrange(pvalue) %>%
   head(50)
 
-ldeup_dn <- subset(lde, (log2FoldChange > 2 | log2FoldChange < -2) & padj < 0.05)
+ldeup_dn <- subset(lde, (log2FoldChange > 1 | log2FoldChange < -1) & padj < 0.05)
 
-ldeup <- rownames(subset(lde, log2FoldChange > 2 & padj < 0.05))
-ldedn <- rownames(subset(lde, log2FoldChange < -2 & padj < 0.05))
+ldeup <- rownames(subset(lde, log2FoldChange > 1 & padj < 0.05))
+ldedn <- rownames(subset(lde, log2FoldChange < -1 & padj < 0.05))
 # Calculate the gene counts
 LDEUP <- length(ldeup)
 LDEDN <- length(ldedn)
@@ -570,12 +586,12 @@ png(filename = "../Figures/LateDEvolcano.png", width = 4800, height = 4800, poin
 
 ggplot(lvol_df, aes(x = log2FoldChange, y = -log10(padj))) +
   geom_point(color = "black", alpha = 0.5, size = 2, shape = 19) +
-  geom_point(data = ldesig, aes(color = "grey"), size = 2, shape = 19) +
-  geom_point(data = ldeup_dn, aes(color = "significantly expressed"), size = 2, shape = 19) +
+  geom_point(data = lde, aes(color = "detected genes"), size = 2, shape = 19) +
+  geom_point(data = ldeup_dn, aes(color = "significantly expressed genes"), size = 2, shape = 19) +
   geom_text(data = subset(ltop_genes, baseMean > 1000), aes(label = Rank),
          hjust = 0.5, vjust = 0.5, color = "black", size = 3) +
          labs(x = "log2foldchange", y = "log10 p-value") +
-  scale_color_manual(values = c("significantly expressed" = "turquoise"),
+  scale_color_manual(values = c("significantly expressed genes" = "turquoise", "detected genes" = "grey"),
                      name = "") +
   theme_bw() +
   theme(axis.line = element_line(color = "black"),
@@ -617,13 +633,69 @@ latedeqtable <-  flextable(latedeqtable) %>%
 print(latedeqtable)
 
 #save_as_docx(latedeqtable, path =  "/mnt/data/barry/projects/Schroeter_Pcinnamomi/sequencing_stats/latedeseqtable.docx", pr_section = sect_properties)
+
 ```
+
 ```{r}
 deseqtable <- read.csv("/mnt/data/barry/projects/Schroeter_Pcinnamomi/shared_scripts/finaltable.tsv")
 
 colnames(deseqtable) <- c("gene_id", "Protein name", "Product", "GO BP terms", "GO BP IDs", "GO MF terms", "GO MF IDs", "GO CC terms", "GO CC IDs", "SP, TM", "Effector")
 
 ```
+
+```{r, differentially expressed genes, echo=FALSE}
+
+detectedde1 <- rownames(subset(ede, (log2FoldChange > 1 | log2FoldChange < -1) & padj < 0.05))
+detectedde2 <- rownames(subset(mde, (log2FoldChange > 1 | log2FoldChange < -1) & padj < 0.05))
+detectedde3 <- rownames(subset(lde, (log2FoldChange > 1 | log2FoldChange < -1) & padj < 0.05))
+
+combined_devector <- c(detectedde1, detectedde2, detectedde3)
+
+# Find the unique elements
+uniquede_elements <- unique(combined_devector)
+
+# Number of unique elements
+uniquede_count <- length(uniquede_elements)
+
+```
+
+```{r, de expression eulerr plot, echo=FALSE}
+
+png("upregulated.png", width = 10, height = 6, units = "in", res = 300)
+
+upregulated <- list("Early-up"=edeup, "Mid-up"=mdeup,"Late-up"=ldeup)
+
+plot(euler(upregulated),quantities = TRUE, labels = list(font = 24), main="Upregulated")
+
+dev.off()
+
+unique_in_edeup <- setdiff(edeup, union(mdeup, ldeup))
+unique_in_mdeup <- setdiff(mdeup, union(edeup, ldeup))
+unique_in_ldeup <- setdiff(ldeup, union(edeup, mdeup))
+
+upfiltered_gtf <- deseqtable %>%
+  filter(gene_id %in% unique_in_ldeup)
+
+```
+
+```{r, de expression eulerr plot, echo=FALSE}
+
+png("downregulated.png", width = 10, height = 6, units = "in", res = 300)
+
+downregulated <- list("Early-down"=ededn, "Mid-down"=mdedn, "Late-down"=ldedn)
+
+plot(euler(downregulated),quantities = TRUE, labels = list(font = 24), main="Downregulated")
+
+unique_in_ededn <- setdiff(ededn, union(mdedn, ldedn))
+unique_in_mdedn <- setdiff(mdedn, union(ededn, ldedn))
+unique_in_ldedn <- setdiff(ldedn, union(ededn, mdedn))
+
+dnfiltered_gtf <- gtf.omicsbox %>%
+  filter(gene_id %in% unique_in_mdedn)
+
+dev.off()
+```
+
 
 ## Session information
 
