@@ -482,7 +482,7 @@ cluster_6_gene_ids <- read.csv("/mnt/data/barry/projects/Schroeter_Pcinnamomi/sh
 cluster_6_gene_ids <- cluster_6_gene_ids$gene_id
 ```
 
-```{r, fig.height= 12}
+```{r, warning=FALSE}
 RNAhelicases <- interproscanresults[grepl('PF00270', interproscanresults$signature_id), ]
 
 RNAhelicases.id <- dplyr::right_join(gtf.omicsbox.effector.phi, RNAhelicases, by = 'protein_id')
@@ -523,11 +523,12 @@ pheatmap(rnahel_matrix,
          fontsize_row = 10, fontsize_col = 14, 
          cellheight = 10, cellwidth = 80,
          cluster_rows = T,
+         treeheight_row = 0,
          display_numbers = rnahel_matrixlabel,
          cluster_cols = F,
          show_rownames = TRUE,
          labels_row = rnahelede_cluster6$common_flag,
-         main = "RNA helicase activity",
+         main = "DEAD/DEAH box helicases",
          border_color = "grey")
 
 ```
