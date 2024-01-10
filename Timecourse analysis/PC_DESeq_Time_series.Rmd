@@ -78,7 +78,7 @@ write.table(x,file="countmatrix.tsv",quote=FALSE,sep="\t")
 Import files into r
 
 ```{r, stringsAsFactors=FALSE}
-coldata <- read.table('sample_info.tsv')
+coldata <- read.table('sample_info.tsv', header = TRUE)
 Pcgenenames <- read.table('pcgeneids.tsv', row.names = 1, quote = "", sep='\t', fill = TRUE, header = TRUE)
 IUM83Tanjilcountmatrix <- read.table('countmatrix.tsv') 
 ```
@@ -112,7 +112,7 @@ colData <- coldata %>%
 
 rownames(colData) <- colData$Sample
 colData <- colData [ ,-1] 
-colnames(colData) <- c("sampleid", "treatment", "timepoint", "stage", "group")
+colnames(colData) <- c("sampleid", "treatment", "stage", "timepoint", "group")
 colData <- dplyr::select(colData, c(sampleid, timepoint, group))  
 
 head(colData)
@@ -140,18 +140,18 @@ tca <- TCA(design = design, genomicFeature = gene.len,
 ```
 
 ```{r}
-set.seed(4232)
+set.seed(0232)
 
 tca <- DBanalysis(tca)
 tca <- DBanalysis(tca, filter.type = "raw", filter.value = 10, samplePassfilter = 3)
 
-DBres <- DBresult(tca, group1 = "0h", group2 = c("18h","30h","48h"))
+DBres <- DBresult(tca, group1 = "0_hpi", group2 = c("18_hpi","30_hpi","48_hpi"))
 str(DBres, strict.width = "cut")
 ```
 
 ```{r}
-head(DBres$`18hvs0h`)
-DBres.sig <- DBresult(tca, group1 = "0h", group2 = c("18h","30h","48h"), top.sig = TRUE)
+head(DBres$`18-hpivs0-hpi`)
+DBres.sig <- DBresult(tca, group1 = "0_hpi", group2 = c("18_hpi","30_hpi","48_hpi"), top.sig = TRUE)
 str(DBres.sig, strict.width = "cut")
 ```
 
@@ -169,15 +169,29 @@ p <- timeclustplot(tca, value = "z-score(PRKM)", cols = 3)
 ```
 
 ```{r}
+# Accessing the cluster information
+cluster_info <- tca@clusterRes@cluster
+#7295 genes clustered into similar gene expression patterns
+
+# Filter genes by cluster
+cluster_1_genes <- names(cluster_info[cluster_info == 1])
+cluster_2_genes <- names(cluster_info[cluster_info == 2])
+cluster_3_genes <- names(cluster_info[cluster_info == 3])
+cluster_4_genes <- names(cluster_info[cluster_info == 4])
+cluster_5_genes <- names(cluster_info[cluster_info == 5])
+cluster_6_genes <- names(cluster_info[cluster_info == 6])
+
+```
+
+```{r}
 #change this depending on the number of clusters/genes
 p[[1]][["labels"]][["title"]] <- paste0("Cluster 1 - 1005 genes")
 p[[2]][["labels"]][["title"]] <- paste0("Cluster 2 - 858 genes")
-p[[3]][["labels"]][["title"]] <- paste0("Cluster 3 - 2082 genes")
-p[[4]][["labels"]][["title"]] <- paste0("Cluster 4 - 1460 genes")
+p[[3]][["labels"]][["title"]] <- paste0("Cluster 3 - 650 genes")
+p[[4]][["labels"]][["title"]] <- paste0("Cluster 4 - 2082 genes")
 p[[5]][["labels"]][["title"]] <- paste0("Cluster 5 - 1789 genes")
-p[[6]][["labels"]][["title"]] <- paste0("Cluster 6 - 650 genes")
+p[[6]][["labels"]][["title"]] <- paste0("Cluster 6 - 1460 genes")
 ```
-
 
 ```{r}
 
@@ -194,20 +208,6 @@ dev.off()
 ```
 
 ```{r}
-# Accessing the cluster information
-cluster_info <- tca@clusterRes@cluster
-
-# Filter genes by cluster
-cluster_1_genes <- names(cluster_info[cluster_info == 1])
-cluster_2_genes <- names(cluster_info[cluster_info == 2])
-cluster_3_genes <- names(cluster_info[cluster_info == 3])
-cluster_4_genes <- names(cluster_info[cluster_info == 4])
-cluster_5_genes <- names(cluster_info[cluster_info == 5])
-cluster_6_genes <- names(cluster_info[cluster_info == 6])
-
-```
-
-```{r}
 deseqtable <- read.csv("/mnt/data/barry/projects/Schroeter_Pcinnamomi/shared_scripts/finaltable.tsv")
 
 cluster_1_genes.id <- deseqtable[deseqtable$gene_id %in% cluster_1_genes, ]
@@ -218,13 +218,17 @@ cluster_5_genes.id <- deseqtable[deseqtable$gene_id %in% cluster_5_genes, ]
 cluster_6_genes.id <- deseqtable[deseqtable$gene_id %in% cluster_6_genes, ]
 ```
 
-```{r, warning=FALSE}
-source("../shared_scripts/detected_pcgenes.R", 
-       local = knitr::knit_global())
+```{r}
+write.csv(cluster_6_genes.id, file = "/mnt/data/barry/projects/Schroeter_Pcinnamomi/shared_scripts/cluster6.tsv", row.names = FALSE)
+```
 
-detectedgenes <- as.data.frame(rownames(assay(dds)))
-colnames(detectedgenes) <- "gene_id"
-detectedgenes.id <- dplyr::right_join(gtf.faa.omicsbox, detectedgenes, by = 'gene_id')
+
+```{r, warning=FALSE}
+
+detectedgenes.id <- read_delim("detectedgenes_id.tsv", show_col_types = FALSE)
+#source("../shared_scripts/detected_pcgenes.R", 
+#       local = knitr::knit_global())
+
 ```
 
 ```{r}
@@ -344,7 +348,7 @@ top_5_highest_p_adjust <- sorted_dataframe %>%
 # View the updated dataframe
 head(top_5_highest_p_adjust, 15)
 
-num_clusters <- 7
+num_clusters <- 6
 cluster_colors <- brewer.pal(num_clusters, "Set2")
 
 png(filename = "../Figures/PcTCA_ora.png", width = 13800, height = 6400, res = 600)
@@ -358,7 +362,7 @@ plot <- ggplot(top_5_highest_p_adjust, aes(x = -log10(p.adjust), y = reorder(ID,
         axis.text.y = element_text(size = 24, margin = margin(r = 0)),
         legend.text = element_text(size = 24),
         axis.text.x = element_text(size = 24),  
-        axis.line.x = element_line(size = 1),
+        axis.line.x = element_line(linewidth = 1),
         legend.title = element_text(size = 24),
         axis.title.x = element_text(size = 24)  
   ) +
@@ -407,38 +411,32 @@ dev.off()
 ```
 
 ```{r}
+countPredictions <- function(data) {
+  total_rows <- nrow(data)
+  effector_rows <- sum(data$Prediction %in% c("Apoplastic effector", "Cytoplasmic effector", "Apoplastic/cytoplasmic effector"))
+  apoplastic_effector_rows <- sum(data$Prediction %in% c("Apoplastic effector", "Apoplastic/cytoplasmic effector"))
+  cytoplasmic_effector_rows <- sum(data$Prediction %in% c("Cytoplasmic effector", "Apoplastic/cytoplasmic effector"))
+  unique_gene_ids <- length(unique(data$gene_id))
+  proportion_effector <- (effector_rows / total_rows) * 100
+  proportion_apoplastic_effector <- (apoplastic_effector_rows / effector_rows) * 100
+  proportion_cytoplasmic_effector <- (cytoplasmic_effector_rows / effector_rows) * 100
+  
+  cat("Total number of proteins:", total_rows, "\n")
+  cat("Number of genes:", unique_gene_ids, "\n")
+  cat("Number Effectors:", effector_rows, "\n")
+  cat("Proportion of effectors:", proportion_effector, "%\n")
+  cat("Proportion of Apoplastic effectors:", proportion_apoplastic_effector, "%\n")
+  cat("Proportion of Cytoplasmic effectors:", proportion_cytoplasmic_effector, "%\n")
+}
 
-
-cluster_1_effector <- Cluster_labels[Cluster_labels$gene_id %in% cluster_1_genes, ]
-
-cluster_1_effector_filtered <- cluster_1_effector %>%
-  filter(PHI_homology == 1 | effectorP == 1)
-
-cluster_2_effector <- Cluster_labels[Cluster_labels$gene_id %in% cluster_2_genes, ]
-
-cluster_2_effector_filtered <- cluster_2_effector %>%
-  filter(PHI_homology == 1 | effectorP == 1)
-
-cluster_3_effector <- Cluster_labels[Cluster_labels$gene_id %in% cluster_3_genes, ]
-
-cluster_3_effector_filtered <- cluster_3_effector %>%
-  filter(PHI_homology == 1 | effectorP == 1)
-
-cluster_4_effector <- Cluster_labels[Cluster_labels$gene_id %in% cluster_4_genes, ]
-
-cluster_4_effector_filtered <- cluster_4_effector %>%
-  filter(PHI_homology == 1 | effectorP == 1)
-
-cluster_5_effector <- Cluster_labels[Cluster_labels$gene_id %in% cluster_5_genes, ]
-
-cluster_5_effector_filtered <- cluster_5_effector %>%
-  filter(PHI_homology == 1 | effectorP == 1) 
-
-cluster_6_effector <- Cluster_labels[Cluster_labels$gene_id %in% cluster_6_genes, ]
-
-cluster_6_effector_filtered <- cluster_6_effector %>%
-  filter(PHI_homology == 1 | effectorP == 1)
+countPredictions(cluster_1_genes.id)
+countPredictions(cluster_2_genes.id)
+countPredictions(cluster_3_genes.id)
+countPredictions(cluster_4_genes.id)
+countPredictions(cluster_5_genes.id)
+countPredictions(cluster_6_genes.id)
 ```
+
 
 ```{r}
 sessionInfo()
